@@ -104,3 +104,6 @@ curl http://localhost:3000/api/patients \
 - เพิ่ม validation ที่ละเอียดขึ้น (เช่นด้วย Joi หรือ express-validator)
 - เพิ่ม unit test / integration test
 - ทำ rate limiting และ logging สำหรับ production
+
+# Clinic_Flow
+7ad86bd4ed7350915492d00592ad4d316d814e90
