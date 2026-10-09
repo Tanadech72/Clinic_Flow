@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Clinic Flow | คลังยา</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f6f9; display: flex; height: 100vh; overflow: hidden; }
+
+    .sidebar { width: 240px; background-color: #1e293b; color: #fff; display: flex; flex-direction: column; flex-shrink: 0; }
+    .sidebar-brand { padding: 20px; font-size: 20px; font-weight: bold; border-bottom: 1px solid #334155; color: #38bdf8; }
+    .sidebar-menu { list-style: none; padding: 0; margin: 20px 0; flex: 1; }
+    .sidebar-menu li a { display: block; padding: 12px 20px; color: #94a3b8; text-decoration: none; font-size: 15px; }
+    .sidebar-menu li a:hover, .sidebar-menu li a.active { background-color: #334155; color: #ffffff; font-weight: bold; }
+
+    .main-wrapper { flex: 1; display: flex; flex-direction: column; overflow-y: auto; }
+    .top-header { background: #ffffff; padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; }
+    .content-area { padding: 24px; }
+
+    .action-bar { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 20px; }
+    .search-group { display: flex; align-items: center; gap: 12px; }
+    .search-input { width: 300px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px; }
+    .filter-label { font-size: 14px; color: #334155; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+
+    .btn { padding: 8px 14px; border-radius: 6px; border: none; cursor: pointer; font-size: 14px; font-weight: bold; }
+    .btn-primary { background: #0284c7; color: white; }
+    .btn-success { background: #10b981; color: white; }
+    .btn-warning { background: #f59e0b; color: white; }
+    .btn-info { background: #6366f1; color: white; }
+    .btn-danger { background: #ef4444; color: white; }
+    .btn-sm { padding: 4px 8px; font-size: 12px; }
+
+    .table-card { background: #ffffff; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 12px; text-align: left; border-bottom: 1px solid #f1f5f9; font-size: 14px; }
+    th { background-color: #f8fafc; color: #475569; }
+
+    .badge-danger { color: #ef4444; font-weight: bold; }
+    .badge-normal { color: #10b981; font-weight: bold; }
+
+    .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1000; }
+    .modal-content { background: #fff; padding: 24px; border-radius: 8px; width: 550px; max-width: 90%; max-height: 90vh; overflow-y: auto; }
+    .form-group { margin-bottom: 12px; }
+    .form-group label { display: block; font-size: 13px; color: #475569; margin-bottom: 4px; }
+    .form-group input, .form-group select { width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 4px; }
+    .form-row { display: flex; gap: 10px; }
+    .form-row .form-group { flex: 1; }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+  </style>
+<link rel="stylesheet" href="/css/app-ui.css?v=2">
+</head>
+<body>
+
+  <aside class="sidebar">
+    <div class="sidebar-brand">🏥 Clinic Flow</div>
+    <ul class="sidebar-menu">
+      <li><a href="/dashboard.html">📊 หน้าหลัก (Dashboard)</a></li>
+      <li><a href="/patients.html">👥 ผู้ป่วย (Patients)</a></li>
+      <li><a href="/records.html">📋 บันทึกการรักษา (OPD)</a></li>
+      <li><a href="/inventory.html" class="active">💊 คลังยา (Inventory)</a></li>
+    </ul>
+  </aside>
+
+  <div class="main-wrapper">
+    <header class="top-header">
+      <h1>จัดการคลังยาและสินค้า</h1>
+      <button class="btn btn-danger" id="logoutButton">ออกจากระบบ</button>
+    </header>
+
+    <div class="content-area">
+      <div class="action-bar">
+        <div class="search-group">
+          <input type="text" id="searchInput" class="search-input" placeholder="ค้นหารหัสยา หรือ ชื่อยา..." oninput="fetchMedicines()">
+          <label class="filter-label">
+            <input type="checkbox" id="lowStockOnly" onchange="fetchMedicines()"> ⚠️ แสดงเฉพาะยาใกล้หมดสต๊อก
+          </label>
+        </div>
+        <button class="btn btn-primary" onclick="openModal()">+ เพิ่มยาใหม่</button>
+      </div>
+
+      <div class="table-card">
+        <table>
+          <thead>
+            <tr>
+              <th>รหัสยา</th>
+              <th>ชื่อยา</th>
+              <th>หมวดหมู่</th>
+              <th>ราคา/หน่วย</th>
+              <th>จำนวนคงเหลือ</th>
+              <th>จุดสั่งซื้อ</th>
+              <th>วันหมดอายุ</th>
+              <th>จัดการ</th>
+            </tr>
+          </thead>
+          <tbody id="tbMedicines">
+            <tr><td colspan="8">กำลังโหลดข้อมูล...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 1: เพิ่ม/แก้ไขยา -->
+  <div class="modal" id="medicineModal">
+    <div class="modal-content">
+      <h2 id="modalTitle">เพิ่มยาใหม่</h2>
+      <form id="medicineForm" onsubmit="saveMedicine(event)">
+        <input type="hidden" id="edit_id">
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>รหัสยา (code) *</label>
+            <input type="text" id="code" required placeholder="เช่น MED001">
+          </div>
+          <div class="form-group">
+            <label>ชื่อยา (name) *</label>
+            <input type="text" id="name" required placeholder="เช่น Paracetamol 500mg">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>หมวดหมู่ (category)</label>
+            <input type="text" id="category" placeholder="เช่น ยาแก้ปวด, ยาแก้ไอ">
+          </div>
+          <div class="form-group">
+            <label>หน่วยนับ (unit) *</label>
+            <input type="text" id="unit" required placeholder="เช่น เม็ด, ขวด, แผง">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>ราคาต่อหน่วย (price_per_unit)</label>
+            <input type="number" step="0.01" id="price_per_unit" value="0">
+          </div>
+          <div class="form-group" id="stockGroup">
+            <label>สต๊อกแรกเริ่ม (stock_quantity)</label>
+            <input type="number" id="stock_quantity" value="0">
+          </div>
+          <div class="form-group">
+            <label>จุดสั่งซื้อ (reorder_level)</label>
+            <input type="number" id="reorder_level" value="10">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>วันหมดอายุ (expiry_date)</label>
+          <input type="date" id="expiry_date">
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn" onclick="closeModal('medicineModal')">ยกเลิก</button>
+          <button type="submit" class="btn btn-primary">บันทึกข้อมูล</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 2: เติมสต๊อกยา (Stock-In) -->
+  <div class="modal" id="stockInModal">
+    <div class="modal-content">
+      <h2>📥 เติมสต๊อกยา</h2>
+      <p id="stockInMedicineName" style="font-weight:bold; color:#0284c7;"></p>
+      <form id="stockInForm" onsubmit="saveStockIn(event)">
+        <input type="hidden" id="stock_in_id">
+
+        <div class="form-group">
+          <label>จำนวนที่รับเข้า *</label>
+          <input type="number" id="stock_in_quantity" required min="1" placeholder="ระบุจำนวน">
+        </div>
+
+        <div class="form-group">
+          <label>เหตุผล / หมายเหตุ</label>
+          <input type="text" id="stock_in_reason" placeholder="เช่น รับสินค้าล็อตใหม่, รับบริจาค">
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn" onclick="closeModal('stockInModal')">ยกเลิก</button>
+          <button type="submit" class="btn btn-success">ยืนยันรับเข้า</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 3: ประวัติการเคลื่อนไหวสต๊อก (Transactions) -->
+  <div class="modal" id="historyModal">
+    <div class="modal-content" style="width:700px;">
+      <h2>📜 ประวัติการเคลื่อนไหวสต๊อก</h2>
+      <p id="historyMedicineName" style="font-weight:bold; color:#0284c7;"></p>
+      <div style="max-height: 350px; overflow-y: auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>วันที่-เวลา</th>
+              <th>ประเภท</th>
+              <th>จำนวน</th>
+              <th>เหตุผล</th>
+              <th>ผู้บันทึก</th>
+            </tr>
+          </thead>
+          <tbody id="tbHistory">
+            <tr><td colspan="5">กำลังโหลดข้อมูล...</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn" onclick="closeModal('historyModal')">ปิด</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const token = localStorage.getItem('token');
+    if (!token) window.location.href = '/';
+
+    let allMedicinesCache = [];
+
+    document.getElementById('logoutButton').addEventListener('click', () => {
+      localStorage.clear();
+      window.location.href = '/';
+    });
+
+    async function fetchMedicines() {
+      const search = document.getElementById('searchInput').value;
+      const lowStock = document.getElementById('lowStockOnly').checked;
+
+      try {
+        const res = await fetch(`/api/medicines?search=${encodeURIComponent(search)}&lowStockOnly=${lowStock}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const result = await res.json();
+        allMedicinesCache = result.data || [];
+
+        const tbody = document.getElementById('tbMedicines');
+        if (allMedicinesCache.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="8">ไม่พบรายการยา</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = allMedicinesCache.map(m => {
+          const isLow = Number(m.stock_quantity) <= Number(m.reorder_level);
+          return `
+            <tr>
+              <td><strong>${m.code}</strong></td>
+              <td>${m.name}</td>
+              <td>${m.category || '-'}</td>
+              <td>฿${Number(m.price_per_unit || 0).toFixed(2)}</td>
+              <td class="${isLow ? 'badge-danger' : 'badge-normal'}">${m.stock_quantity} ${m.unit || ''}</td>
+              <td>${m.reorder_level}</td>
+              <td>${formatDate(m.expiry_date)}</td>
+              <td>
+                <button class="btn btn-success btn-sm" onclick="openStockInModal(${m.id}, '${m.name}')">📥 เติมสต๊อก</button>
+                <button class="btn btn-warning btn-sm" onclick="editMedicine(${m.id})">แก้ไข</button>
+                <button class="btn btn-info btn-sm" onclick="viewHistory(${m.id}, '${m.name}')">ประวัติ</button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      } catch (err) {
+        console.error('Error fetching medicines:', err);
+      }
+    }
+
+    function formatDate(dateStr) {
+      if (!dateStr) return '-';
+      return new Date(dateStr).toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' });
+    }
+
+    function openModal() {
+      document.getElementById('edit_id').value = '';
+      document.getElementById('medicineForm').reset();
+      document.getElementById('code').disabled = false;
+      document.getElementById('stockGroup').style.display = 'block'; // แสดงช่องสต๊อกเมื่อเพิ่มยาใหม่
+      document.getElementById('modalTitle').textContent = 'เพิ่มยาใหม่';
+      document.getElementById('medicineModal').style.display = 'flex';
+    }
+
+    function closeModal(modalId) {
+      document.getElementById(modalId).style.display = 'none';
+    }
+
+    function editMedicine(id) {
+      const m = allMedicinesCache.find(item => item.id === id);
+      if (!m) return;
+
+      document.getElementById('edit_id').value = m.id;
+      document.getElementById('code').value = m.code;
+      document.getElementById('code').disabled = true; // ห้ามแก้รหัสยา
+      document.getElementById('name').value = m.name;
+      document.getElementById('category').value = m.category || '';
+      document.getElementById('unit').value = m.unit || '';
+      document.getElementById('price_per_unit').value = m.price_per_unit || 0;
+      document.getElementById('reorder_level').value = m.reorder_level || 10;
+      document.getElementById('expiry_date').value = m.expiry_date ? m.expiry_date.split('T')[0] : '';
+
+      document.getElementById('stockGroup').style.display = 'none'; // ซ่อนสต๊อก (การแก้ไขสต๊อกต้องใช้ปุ่มเติมสต๊อก)
+      document.getElementById('modalTitle').textContent = 'แก้ไขข้อมูลยา';
+      document.getElementById('medicineModal').style.display = 'flex';
+    }
+
+    async function saveMedicine(e) {
+      e.preventDefault();
+      const editId = document.getElementById('edit_id').value;
+      const method = editId ? 'PUT' : 'POST';
+      const url = editId ? `/api/medicines/${editId}` : '/api/medicines';
+
+      const payload = {
+        code: document.getElementById('code').value,
+        name: document.getElementById('name').value,
+        category: document.getElementById('category').value,
+        unit: document.getElementById('unit').value,
+        price_per_unit: Number(document.getElementById('price_per_unit').value),
+        reorder_level: Number(document.getElementById('reorder_level').value),
+        expiry_date: document.getElementById('expiry_date').value || null
+      };
+
+      if (!editId) {
+        payload.stock_quantity = Number(document.getElementById('stock_quantity').value);
+      }
+
+      try {
+        const res = await fetch(url, {
+          method,
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        if (res.ok) {
+          alert(data.message);
+          closeModal('medicineModal');
+          fetchMedicines();
+        } else {
+          alert(data.message || 'เกิดข้อผิดพลาด');
+        }
+      } catch (err) {
+        alert('เกิดข้อผิดพลาดในการเชื่อมต่อ');
+      }
+    }
+
+    // Modal รับเข้าสต๊อก (Stock-In)
+    function openStockInModal(id, name) {
+      document.getElementById('stock_in_id').value = id;
+      document.getElementById('stockInMedicineName').textContent = `ยา: ${name}`;
+      document.getElementById('stockInForm').reset();
+      document.getElementById('stockInModal').style.display = 'flex';
+    }
+
+    async function saveStockIn(e) {
+      e.preventDefault();
+      const id = document.getElementById('stock_in_id').value;
+      const quantity = Number(document.getElementById('stock_in_quantity').value);
+      const reason = document.getElementById('stock_in_reason').value;
+
+      try {
+        const res = await fetch(`/api/medicines/${id}/stock-in`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ quantity, reason })
+        });
+
+        const data = await res.json();
+        if (res.ok) {
+          alert(data.message);
+          closeModal('stockInModal');
+          fetchMedicines();
+        } else {
+          alert(data.message || 'เกิดข้อผิดพลาด');
+        }
+      } catch (err) {
+        alert('เกิดข้อผิดพลาดในการเติมสต๊อก');
+      }
+    }
+
+    // Modal ดูประวัติการย้ายสต๊อก (Transactions)
+    async function viewHistory(id, name) {
+      document.getElementById('historyMedicineName').textContent = `ยา: ${name}`;
+      document.getElementById('tbHistory').innerHTML = '<tr><td colspan="5">กำลังโหลดข้อมูล...</td></tr>';
+      document.getElementById('historyModal').style.display = 'flex';
+
+      try {
+        const res = await fetch(`/api/medicines/${id}/transactions`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const result = await res.json();
+        const rows = result.data || [];
+
+        const tbody = document.getElementById('tbHistory');
+        if (rows.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="5">ยังไม่มีประวัติการทำรายการ</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = rows.map(r => `
+          <tr>
+            <td>${new Date(r.created_at).toLocaleString('th-TH')}</td>
+            <td><span style="color: ${r.change_type === 'in' ? '#10b981' : '#ef4444'}; font-weight:bold;">${r.change_type === 'in' ? 'รับเข้า (+)' : 'จ่ายออก (-)'}</span></td>
+            <td>${r.quantity}</td>
+            <td>${r.reason || '-'}</td>
+            <td>${r.created_by_name || '-'}</td>
+          </tr>
+        `).join('');
+      } catch (err) {
+        document.getElementById('tbHistory').innerHTML = '<tr><td colspan="5">ไม่สามารถดึงข้อมูลประวัติได้</td></tr>';
+      }
+    }
+
+    fetchMedicines();
+  </script>
+<script src="/js/role-navigation.js"></script>
+<script src="/js/app-ui.js?v=2"></script>
+</body>
+</html>

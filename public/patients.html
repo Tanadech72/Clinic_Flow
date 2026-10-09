@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Clinic Flow | ผู้ป่วย</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f6f9; display: flex; height: 100vh; overflow: hidden; }
+
+    .sidebar { width: 240px; background-color: #1e293b; color: #fff; display: flex; flex-direction: column; flex-shrink: 0; }
+    .sidebar-brand { padding: 20px; font-size: 20px; font-weight: bold; border-bottom: 1px solid #334155; color: #38bdf8; }
+    .sidebar-menu { list-style: none; padding: 0; margin: 20px 0; flex: 1; }
+    .sidebar-menu li a { display: block; padding: 12px 20px; color: #94a3b8; text-decoration: none; font-size: 15px; }
+    .sidebar-menu li a:hover, .sidebar-menu li a.active { background-color: #334155; color: #ffffff; font-weight: bold; }
+
+    .main-wrapper { flex: 1; display: flex; flex-direction: column; overflow-y: auto; }
+    .top-header { background: #ffffff; padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; }
+    .content-area { padding: 24px; }
+
+    .action-bar { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 20px; }
+    .search-input { width: 320px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px; }
+    
+    .btn { padding: 8px 14px; border-radius: 6px; border: none; cursor: pointer; font-size: 14px; font-weight: bold; }
+    .btn-primary { background: #0284c7; color: white; }
+    .btn-warning { background: #f59e0b; color: white; }
+    .btn-danger { background: #ef4444; color: white; }
+    .btn-sm { padding: 4px 8px; font-size: 12px; }
+
+    .table-card { background: #ffffff; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 12px; text-align: left; border-bottom: 1px solid #f1f5f9; font-size: 14px; }
+    th { background-color: #f8fafc; color: #475569; }
+
+    .pagination { display: flex; justify-content: space-between; align-items: center; margin-top: 15px; }
+
+    .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1000; }
+    .modal-content { background: #fff; padding: 24px; border-radius: 8px; width: 600px; max-width: 95%; max-height: 90vh; overflow-y: auto; }
+    .form-group { margin-bottom: 12px; }
+    .form-group label { display: block; font-size: 13px; color: #475569; margin-bottom: 4px; }
+    .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 4px; }
+    .form-row { display: flex; gap: 10px; }
+    .form-row .form-group { flex: 1; }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+  </style>
+<link rel="stylesheet" href="/css/app-ui.css?v=2">
+</head>
+<body>
+
+  <aside class="sidebar">
+    <div class="sidebar-brand">🏥 Clinic Flow</div>
+    <ul class="sidebar-menu">
+      <li><a href="/dashboard.html">📊 หน้าหลัก (Dashboard)</a></li>
+      <li><a href="/patients.html" class="active">👥 ผู้ป่วย (Patients)</a></li>
+      <li><a href="/records.html">📋 บันทึกการรักษา (OPD)</a></li>
+      <li><a href="/inventory.html">💊 คลังยา (Inventory)</a></li>
+    </ul>
+  </aside>
+
+  <div class="main-wrapper">
+    <header class="top-header">
+      <h1>จัดการข้อมูลผู้ป่วย</h1>
+      <button class="btn btn-danger" id="logoutButton">ออกจากระบบ</button>
+    </header>
+
+    <div class="content-area">
+      <div class="action-bar">
+        <input type="text" id="searchInput" class="search-input" placeholder="ค้นหา HN, ชื่อ, นามสกุล, เลขบัตรประชาชน..." oninput="onSearch()">
+        <button class="btn btn-primary" onclick="openModal()">+ เพิ่มผู้ป่วยใหม่</button>
+      </div>
+
+      <div class="table-card">
+        <table>
+          <thead>
+            <tr>
+              <th>รหัส HN</th>
+              <th>ชื่อ-นามสกุล</th>
+              <th>อายุ</th>
+              <th>เพศ/กรุ๊ปเลือด</th>
+              <th>เบอร์โทร</th>
+              <th>แพ้ยา / โรคประจำตัว</th>
+              <th>จัดการ</th>
+            </tr>
+          </thead>
+          <tbody id="tbPatients">
+            <tr><td colspan="7">กำลังโหลดข้อมูล...</td></tr>
+          </tbody>
+        </table>
+
+        <div class="pagination">
+          <span id="pageInfo">หน้าที่ 1</span>
+          <div>
+            <button class="btn btn-sm" id="prevBtn" onclick="changePage(-1)">ก่อนหน้า</button>
+            <button class="btn btn-sm" id="nextBtn" onclick="changePage(1)">ถัดไป</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal ป๊อปอัป เพิ่ม/แก้ไขผู้ป่วย -->
+  <div class="modal" id="patientModal">
+    <div class="modal-content">
+      <h2 id="modalTitle">ลงทะเบียนผู้ป่วยใหม่</h2>
+      <form id="patientForm" onsubmit="savePatient(event)">
+        <input type="hidden" id="edit_id">
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="hn_code">รหัส HN</label>
+            <input type="text" id="hn_code" readonly placeholder="ระบบสร้างให้อัตโนมัติเมื่อบันทึก">
+            <span class="field-help">ผู้ป่วยแต่ละรายจะได้รับรหัสไม่ซ้ำกัน</span>
+          </div>
+          <div class="form-group">
+            <label>เลขประจำตัวประชาชน</label>
+            <input type="text" id="national_id" placeholder="13 หลัก">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group" style="flex: 0.5;">
+            <label>คำนำหน้า</label>
+            <input type="text" id="prefix" placeholder="นาย/นาง/น.ส.">
+          </div>
+          <div class="form-group">
+            <label>ชื่อ *</label>
+            <input type="text" id="first_name" required>
+          </div>
+          <div class="form-group">
+            <label>นามสกุล *</label>
+            <input type="text" id="last_name" required>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+           <label for="gender">เพศ *</label>
+            <select id="gender" name="gender" required>
+            <option value="">เลือกเพศ</option>
+            <option value="male">ชาย</option>
+            <option value="female">หญิง</option>
+            <option value="other">อื่น ๆ</option>
+        </select>
+          </div>
+          <div class="form-group">
+            <label>กรุ๊ปเลือด</label>
+            <select id="blood_type">
+              <option value="">-- ไม่ระบุ --</option>
+              <option value="A">A</option>
+              <option value="B">B</option>
+              <option value="O">O</option>
+              <option value="AB">AB</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>วันเกิด</label>
+            <input type="date" id="date_of_birth">
+          </div>
+        </div>
+
+        <section class="patient-measurements" aria-label="ข้อมูลร่างกาย">
+          <h3>อายุผู้ป่วย</h3>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="age">อายุ (ปี)</label>
+              <input type="text" id="age" readonly placeholder="คำนวณจากวันเกิด">
+            </div>
+          </div>
+          <p class="field-help">อายุคำนวณจากวันเกิด</p>
+        </section>
+
+        <div class="form-group">
+          <label>เบอร์โทรศัพท์</label>
+          <input type="text" id="phone">
+        </div>
+
+        <div class="form-group">
+          <label>ประวัติแพ้ยา (allergies)</label>
+          <input type="text" id="allergies" placeholder="เช่น Penicillin, Aspirin">
+        </div>
+
+        <div class="form-group">
+          <label>โรคประจำตัว (underlying_conditions)</label>
+          <input type="text" id="underlying_conditions" placeholder="เช่น ความดันโลหิตสูง, เบาหวาน">
+        </div>
+
+        <div class="form-group">
+          <label>ที่อยู่</label>
+          <textarea id="address" rows="2"></textarea>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn" onclick="closeModal()">ยกเลิก</button>
+          <button type="submit" class="btn btn-primary">บันทึกข้อมูล</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/js/patient-metrics.js"></script>
+  <script>
+    const token = localStorage.getItem('token');
+    if (!token) window.location.href = '/';
+
+    let currentPage = 1;
+    let limit = 20;
+
+    document.getElementById('date_of_birth').max = PatientMetrics.today();
+    function updatePatientMetrics() {
+      const age = PatientMetrics.age(document.getElementById('date_of_birth').value);
+      document.getElementById('age').value = age === null ? '' : age;
+    }
+    ['date_of_birth'].forEach(id => {
+      document.getElementById(id).addEventListener('input', updatePatientMetrics);
+    });
+
+    document.getElementById('logoutButton').addEventListener('click', () => {
+      localStorage.clear();
+      window.location.href = '/';
+    });
+
+    function onSearch() {
+      currentPage = 1;
+      fetchPatients();
+    }
+
+    async function fetchPatients() {
+      const search = document.getElementById('searchInput').value;
+      try {
+        const res = await fetch(`/api/patients?search=${encodeURIComponent(search)}&page=${currentPage}&limit=${limit}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const result = await res.json();
+        if (!res.ok) throw new Error(result.message || 'โหลดข้อมูลผู้ป่วยไม่สำเร็จ');
+
+        const tbody = document.getElementById('tbPatients');
+        const data = result.data || [];
+
+        if (data.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="7">ไม่พบข้อมูลผู้ป่วย</td></tr>';
+          document.getElementById('pageInfo').textContent = `หน้าที่ ${currentPage}`;
+          return;
+        }
+
+        tbody.innerHTML = data.map(p => `
+          <tr>
+            <td><strong>${p.hn_code}</strong></td>
+            <td>${p.prefix || ''}${p.first_name} ${p.last_name}</td>
+            <td class="patient-metric">${p.age === null ? '-' : p.age + ' ปี'}</td>
+            <td>${p.gender === 'male' ? 'ชาย' : p.gender === 'female' ? 'หญิง' : 'อื่นๆ'} (${p.blood_type || '-'})</td>
+            <td>${p.phone || '-'}</td>
+            <td>
+              <span style="color:#ef4444;">${p.allergies ? 'แพ้: ' + p.allergies : 'ไม่แพ้ยา'}</span><br>
+              <small style="color:#64748b;">${p.underlying_conditions ? 'โรค: ' + p.underlying_conditions : ''}</small>
+            </td>
+            <td>
+              <button class="btn btn-warning btn-sm" onclick="editPatient(${p.id})">แก้ไข</button>
+            </td>
+          </tr>
+        `).join('');
+
+        const totalPages = Math.ceil((result.total || 0) / limit) || 1;
+        document.getElementById('pageInfo').textContent = `หน้าที่ ${currentPage} / ${totalPages} (ทั้งหมด ${result.total || 0} รายการ)`;
+        document.getElementById('prevBtn').disabled = currentPage <= 1;
+        document.getElementById('nextBtn').disabled = currentPage >= totalPages;
+
+      } catch (err) {
+        console.error('Error fetching patients:', err);
+        document.getElementById('tbPatients').innerHTML = '<tr><td colspan="7">โหลดข้อมูลไม่สำเร็จ กรุณาลองใหม่</td></tr>';
+      }
+    }
+
+    function changePage(step) {
+      currentPage += step;
+      fetchPatients();
+    }
+
+    function openModal() {
+      document.getElementById('edit_id').value = '';
+      document.getElementById('patientForm').reset();
+      updatePatientMetrics();
+      document.getElementById('hn_code').disabled = false;
+      document.getElementById('hn_code').value = '';
+      document.getElementById('modalTitle').textContent = 'ลงทะเบียนผู้ป่วยใหม่';
+      document.getElementById('patientModal').style.display = 'flex';
+    }
+
+    function closeModal() { document.getElementById('patientModal').style.display = 'none'; }
+
+    async function editPatient(id) {
+      try {
+        const res = await fetch(`/api/patients/${id}`, { headers: { 'Authorization': `Bearer ${token}` } });
+        const result = await res.json();
+        if (!res.ok) throw new Error(result.message || 'โหลดข้อมูลผู้ป่วยไม่สำเร็จ');
+        const p = result.data;
+
+        document.getElementById('edit_id').value = p.id;
+        document.getElementById('hn_code').value = p.hn_code;
+        document.getElementById('hn_code').disabled = true; // ห้ามแก้ HN
+        document.getElementById('national_id').value = p.national_id || '';
+        document.getElementById('prefix').value = p.prefix || '';
+        document.getElementById('first_name').value = p.first_name || '';
+        document.getElementById('last_name').value = p.last_name || '';
+        document.getElementById('gender').value = p.gender || 'male';
+        document.getElementById('blood_type').value = p.blood_type || '';
+        document.getElementById('date_of_birth').value = p.date_of_birth ? p.date_of_birth.split('T')[0] : '';
+        updatePatientMetrics();
+        document.getElementById('phone').value = p.phone || '';
+        document.getElementById('allergies').value = p.allergies || '';
+        document.getElementById('underlying_conditions').value = p.underlying_conditions || '';
+        document.getElementById('address').value = p.address || '';
+
+        document.getElementById('modalTitle').textContent = 'แก้ไขข้อมูลผู้ป่วย';
+        document.getElementById('patientModal').style.display = 'flex';
+      } catch (err) {
+        alert('ไม่สามารถดึงข้อมูลผู้ป่วยได้');
+      }
+    }
+
+    async function savePatient(e) {
+      e.preventDefault();
+      const editId = document.getElementById('edit_id').value;
+      const method = editId ? 'PUT' : 'POST';
+      const url = editId ? `/api/patients/${editId}` : '/api/patients';
+
+      const payload = {
+        national_id: document.getElementById('national_id').value,
+        prefix: document.getElementById('prefix').value,
+        first_name: document.getElementById('first_name').value,
+        last_name: document.getElementById('last_name').value,
+        gender: document.getElementById('gender').value,
+        blood_type: document.getElementById('blood_type').value,
+        date_of_birth: document.getElementById('date_of_birth').value || null,
+        phone: document.getElementById('phone').value,
+        allergies: document.getElementById('allergies').value,
+        underlying_conditions: document.getElementById('underlying_conditions').value,
+        address: document.getElementById('address').value
+      };
+
+      try {
+        const res = await fetch(url, {
+          method: method,
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        if (res.ok) {
+          alert(data.message);
+          closeModal();
+          fetchPatients();
+        } else {
+          alert(data.message || 'เกิดข้อผิดพลาด');
+        }
+      } catch (err) {
+        alert('เกิดข้อผิดพลาดในการเชื่อมต่อ');
+      }
+    }
+
+    fetchPatients();
+  </script>
+<script src="/js/role-navigation.js"></script>
+<script src="/js/app-ui.js?v=2"></script>
+</body>
+</html>

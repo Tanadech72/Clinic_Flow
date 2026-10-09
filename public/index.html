@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Clinic Flow | เข้าสู่ระบบ</title>
+
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <main class="login-page">
+    <section class="login-card">
+      <h1>Clinic Flow</h1>
+      <p>ระบบจัดการคลินิก</p>
+
+      <form id="loginForm">
+        <label for="username">ชื่อผู้ใช้งาน</label>
+        <input
+          type="text"
+          id="username"
+          placeholder="กรอกชื่อผู้ใช้งาน"
+          required
+        >
+
+        <label for="password">รหัสผ่าน</label>
+        <input
+          type="password"
+          id="password"
+          placeholder="กรอกรหัสผ่าน"
+          required
+        >
+
+        <button type="submit">เข้าสู่ระบบ</button>
+        <p id="message"></p>
+      </form>
+    </section>
+  </main>
+
+  <script src="/js/app.js"></script>
+</body>
+</html>

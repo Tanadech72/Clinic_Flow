@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Clinic Flow | Dashboard</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f6f9; display: flex; height: 100vh; overflow: hidden; }
+
+    /* Layout ด้านซ้าย: Sidebar */
+    .sidebar { width: 240px; background-color: #1e293b; color: #fff; display: flex; flex-direction: column; flex-shrink: 0; }
+    .sidebar-brand { padding: 20px; font-size: 20px; font-weight: bold; border-bottom: 1px solid #334155; color: #38bdf8; }
+    .sidebar-menu { list-style: none; padding: 0; margin: 20px 0; flex: 1; }
+    .sidebar-menu li a { display: block; padding: 12px 20px; color: #94a3b8; text-decoration: none; font-size: 15px; transition: 0.2s; }
+    .sidebar-menu li a:hover, .sidebar-menu li a.active { background-color: #334155; color: #ffffff; font-weight: bold; }
+
+    /* Layout ด้านขวา: Main Content */
+    .main-wrapper { flex: 1; display: flex; flex-direction: column; overflow-y: auto; }
+    .top-header { background: #ffffff; padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; }
+    .top-header h1 { margin: 0; font-size: 20px; color: #0f172a; }
+    .content-area { padding: 24px; }
+
+    /* สไตล์การ์ดสรุปผล */
+    .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .card { background: #ffffff; padding: 16px 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); }
+    .card h3 { font-size: 14px; color: #64748b; margin: 0 0 8px 0; }
+    .card .number { font-size: 28px; font-weight: bold; color: #0284c7; }
+    .card .danger { color: #ef4444; }
+    .card .warning { color: #f97316; }
+
+    /* สไตล์ตาราง */
+    .section-block { background: #ffffff; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); margin-bottom: 24px; }
+    .section-block h2 { font-size: 16px; margin-top: 0; color: #334155; border-bottom: 1px solid #f1f5f9; padding-bottom: 10px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #f1f5f9; font-size: 14px; }
+    th { background-color: #f8fafc; color: #475569; }
+    
+    .btn-logout { background: #ef4444; color: white; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; }
+    .btn-logout:hover { background: #dc2626; }
+  </style>
+<link rel="stylesheet" href="/css/app-ui.css?v=2">
+</head>
+<body>
+
+  <!-- แถบเมนู Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">🏥 Clinic Flow</div>
+    <ul class="sidebar-menu">
+      <li><a href="/dashboard.html" class="active">📊 หน้าหลัก (Dashboard)</a></li>
+      <li><a href="/patients.html">👥 ผู้ป่วย (Patients)</a></li>
+      <li><a href="/records.html">📋 บันทึกการรักษา (OPD)</a></li>
+      <li><a href="/inventory.html">💊 คลังยา (Inventory)</a></li>
+    </ul>
+  </aside>
+
+  <!-- พื้นที่แสดงเนื้อหาหลัก -->
+  <div class="main-wrapper">
+    <header class="top-header">
+      <div>
+        <div class="page-eyebrow">Clinic overview</div>
+        <h1>ภาพรวมคลินิก</h1>
+        <p id="welcomeMessage">ยินดีต้อนรับ</p>
+      </div>
+      <button class="btn-logout" id="logoutButton">ออกจากระบบ</button>
+    </header>
+
+    <div class="content-area">
+      <!-- การ์ดสรุปยอด -->
+      <div class="summary-grid">
+        <div class="card">
+          <h3>ผู้ป่วยในระบบ</h3>
+          <div class="number" id="valPatients">0</div>
+        </div>
+        <div class="card">
+          <h3>เข้ารักษาวันนี้</h3>
+          <div class="number" id="valVisitsToday">0</div>
+        </div>
+        <div class="card">
+          <h3>ยาคงเหลือต่ำ</h3>
+          <div class="number danger" id="valLowStock">0</div>
+        </div>
+        <div class="card">
+          <h3>ยาใกล้หมดอายุ (90 วัน)</h3>
+          <div class="number warning" id="valExpiring">0</div>
+        </div>
+      </div>
+
+      <!-- ตารางข้อมูล -->
+      <div class="section-block">
+        <h2>⚠️ ยาคงเหลือต่ำกว่าเกณฑ์ (10 รายการแรก)</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>รหัส</th>
+              <th>ชื่อยา</th>
+              <th>จำนวนคงเหลือ</th>
+              <th>จุดสั่งซื้อ</th>
+            </tr>
+          </thead>
+          <tbody id="tbLowStock">
+            <tr><td colspan="4">กำลังโหลดข้อมูล...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="section-block">
+        <h2>⏳ ยาใกล้หมดอายุ (10 รายการแรก)</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>รหัส</th>
+              <th>ชื่อยา</th>
+              <th>วันหมดอายุ</th>
+              <th>คงเหลือ</th>
+            </tr>
+          </thead>
+          <tbody id="tbExpiring">
+            <tr><td colspan="4">กำลังโหลดข้อมูล...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="section-block">
+        <h2>🏥 ประวัติการรักษาล่าสุด</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>วัน-เวลา</th>
+              <th>รหัส HN</th>
+              <th>ชื่อผู้ป่วย</th>
+              <th>แพทย์ผู้ตรวจ</th>
+            </tr>
+          </thead>
+          <tbody id="tbRecentVisits">
+            <tr><td colspan="4">กำลังโหลดข้อมูล...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const token = localStorage.getItem('token');
+    const user = JSON.parse(localStorage.getItem('user') || 'null');
+
+    if (!token) {
+      window.location.href = '/';
+    } else {
+      document.getElementById('welcomeMessage').textContent =
+        `สวัสดี, ${user?.full_name || user?.username || 'ผู้ใช้งาน'}`;
+      fetchDashboardData();
+    }
+
+    document.getElementById('logoutButton').addEventListener('click', () => {
+      localStorage.clear();
+      window.location.href = '/';
+    });
+
+    async function fetchDashboardData() {
+      try {
+        const res = await fetch('/api/dashboard', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (res.status === 401 || res.status === 403) {
+          localStorage.clear();
+          window.location.href = '/';
+          return;
+        }
+
+        const data = await res.json();
+        renderDashboard(data);
+      } catch (err) {
+        console.error('Error:', err);
+      }
+    }
+
+    function renderDashboard(data) {
+      document.getElementById('valPatients').textContent = data.summary.totalActivePatients;
+      document.getElementById('valVisitsToday').textContent = data.summary.visitsToday;
+      document.getElementById('valLowStock').textContent = data.summary.lowStockCount;
+      document.getElementById('valExpiring').textContent = data.summary.expiringSoonCount;
+
+      const tbLowStock = document.getElementById('tbLowStock');
+      tbLowStock.innerHTML = data.lowStockMedicines.length === 0
+        ? '<tr><td colspan="4">ไม่มีรายการยาคงเหลือต่ำ</td></tr>'
+        : data.lowStockMedicines.map(m => `
+          <tr>
+            <td>${m.code}</td>
+            <td>${m.name}</td>
+            <td style="color:#ef4444; font-weight:bold;">${m.stock_quantity}</td>
+            <td>${m.reorder_level}</td>
+          </tr>`).join('');
+
+      const tbExpiring = document.getElementById('tbExpiring');
+      tbExpiring.innerHTML = data.expiringSoon.length === 0
+        ? '<tr><td colspan="4">ไม่มีรายการยาใกล้หมดอายุ</td></tr>'
+        : data.expiringSoon.map(m => `
+          <tr>
+            <td>${m.code}</td>
+            <td>${m.name}</td>
+            <td style="color:#f97316;">${formatDate(m.expiry_date, false)}</td>
+            <td>${m.stock_quantity}</td>
+          </tr>`).join('');
+
+      const tbRecentVisits = document.getElementById('tbRecentVisits');
+      tbRecentVisits.innerHTML = data.recentVisits.length === 0
+        ? '<tr><td colspan="4">ไม่มีประวัติการรักษาล่าสุด</td></tr>'
+        : data.recentVisits.map(v => `
+          <tr>
+            <td>${formatDate(v.visit_date, true)}</td>
+            <td>${v.hn_code}</td>
+            <td>${v.first_name} ${v.last_name}</td>
+            <td>${v.doctor_name || '-'}</td>
+          </tr>`).join('');
+    }
+
+    function formatDate(dateStr, includeTime = false) {
+      if (!dateStr) return '-';
+      const d = new Date(dateStr);
+      return d.toLocaleDateString('th-TH', {
+        year: 'numeric', month: 'short', day: 'numeric',
+        ...(includeTime && { hour: '2-digit', minute: '2-digit' })
+      });
+    }
+  </script>
+<script src="/js/role-navigation.js"></script>
+<script src="/js/app-ui.js?v=2"></script>
+</body>
+</html>

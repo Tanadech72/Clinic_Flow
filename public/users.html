@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Clinic Flow | บัญชีผู้ใช้งาน</title>
+  <link rel="stylesheet" href="/css/workflow.css">
+  <link rel="stylesheet" href="/css/app-ui.css?v=2">
+</head>
+<body>
+  <nav aria-label="เมนูหลัก"><strong>Clinic Flow</strong><p>แพทย์ / เจ้าของคลินิก</p>
+    <a href="/doctor.html">ห้องตรวจแพทย์</a><a href="/patients.html">ข้อมูลผู้ป่วย</a>
+    <a href="/records.html">ประวัติการรักษา</a><a href="/inventory.html">คลังยา</a>
+    <a href="/dashboard.html">ภาพรวมคลินิก</a><a class="active" href="/users.html">บัญชีผู้ใช้งาน</a>
+  </nav>
+  <main>
+    <header><div><div class="page-eyebrow">Clinic team</div><h1>บัญชีผู้ใช้งาน</h1><p class="muted">เพิ่มสมาชิกทีม และกำหนดหน้าที่ในการดูแลผู้ป่วย</p></div><a class="button secondary" href="/doctor.html">กลับห้องตรวจ</a></header>
+    <div class="user-layout">
+      <form class="card user-form" id="userForm">
+        <h2>สร้างบัญชีใหม่</h2><p class="form-description">กรอกข้อมูลผู้ใช้งาน แล้วเลือกหน้าที่ให้เหมาะกับการทำงาน</p>
+        <div class="account-fields">
+          <div class="field-full"><label for="fullName">ชื่อแสดงผล *</label><input id="fullName" autocomplete="name" placeholder="เช่น Warin หรือชื่อ-นามสกุล" required><span class="field-help">ชื่อที่แสดงในระบบและบันทึกการทำงาน</span></div>
+          <div><label for="username">ชื่อบัญชีเข้าสู่ระบบ *</label><input id="username" autocomplete="off" placeholder="เช่น warin" required><span class="field-help">ใช้ชื่อนี้กรอกในหน้าเข้าสู่ระบบ</span></div>
+          <div><label for="password">รหัสผ่าน *</label><div class="password-wrap"><input id="password" type="password" autocomplete="new-password" placeholder="กำหนดรหัสผ่าน" required><button type="button" id="togglePassword" aria-pressed="false" aria-label="แสดงหรือซ่อนรหัสผ่าน">แสดง</button></div></div>
+          <div class="field-full"><label for="role">หน้าที่ในคลินิก *</label><select id="role"><option value="nurse">พยาบาล — บันทึกข้อมูลและจ่ายยา</option><option value="doctor">หมอ / เจ้าของคลินิก — ตรวจรักษาและสั่งยา</option></select><span class="field-help">ระบบจะเปิดหน้าทำงานตามหน้าที่เมื่อเข้าสู่ระบบ</span></div>
+        </div>
+        <div class="actions"><button type="reset" class="secondary">ล้างข้อมูล</button><button type="submit">+ สร้างบัญชี</button></div>
+        <p id="message" role="status" aria-live="polite"></p>
+      </form>
+      <aside class="card role-guide" aria-label="คำอธิบายหน้าที่">
+        <h2>สองหน้าที่ หนึ่งทีมดูแล</h2>
+        <div class="role-description"><h3><span class="role-number">01</span>หมอ / เจ้าของคลินิก</h3><p>ตรวจผู้ป่วย วินิจฉัย บันทึกการรักษา และสั่งยา พร้อมดูภาพรวมคลินิกและสร้างบัญชีให้ทีม</p></div>
+        <div class="role-description"><h3><span class="role-number">02</span>พยาบาล</h3><p>ลงทะเบียนผู้ป่วย บันทึกอาการและสัญญาณชีพ ส่งเข้าคิวตรวจ และจ่ายยาตามคำสั่งหลังหมอตรวจเสร็จ</p></div>
+        <p class="guide-note">หลังสร้างบัญชี ส่งชื่อบัญชีและรหัสผ่านให้สมาชิกทีมเพื่อเข้าสู่ระบบด้วยบัญชีของตัวเอง</p>
+      </aside>
+    </div>
+  </main>
+  <script src="/js/users.js"></script><script src="/js/app-ui.js?v=2"></script>
+</body></html>

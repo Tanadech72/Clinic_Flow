@@ -1,0 +1,4 @@
+CREATE TABLE IF NOT EXISTS patient_hn_sequence (
+  id TINYINT PRIMARY KEY,
+  last_number BIGINT UNSIGNED NOT NULL DEFAULT 0
+);
