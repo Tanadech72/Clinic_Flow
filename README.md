@@ -18,14 +18,39 @@ clinic-flow/
 ├── routes/
 │   ├── auth.js              # login, สร้างผู้ใช้งาน
 │   ├── patients.js          # CRUD + ค้นหาผู้ป่วย
-│   ├── records.js           # ประวัติการรักษา + สั่งจ่ายยา
+│   ├── records.js           # ประวัติการรักษา
+│   ├── visits.js            # คิวตรวจ: บันทึกก่อนตรวจ → หมอสั่งยา → พยาบาลจ่ายยา
 │   ├── medicines.js         # จัดการยา + สต๊อก
 │   └── dashboard.js         # สรุปข้อมูลภาพรวม
+├── public/                  # Frontend (HTML/CSS/JS) เสิร์ฟโดย Express
+│   ├── index.html           # หน้าเข้าสู่ระบบ
+│   ├── doctor.html          # หน้าหมอ: ตรวจ วินิจฉัย สั่งยา
+│   ├── nurse.html           # หน้าพยาบาล: บันทึกก่อนตรวจ จ่ายยา
+│   ├── patients.html        # ข้อมูลผู้ป่วย
+│   ├── records.html         # ประวัติการรักษา
+│   ├── inventory.html       # สต๊อกยา
+│   ├── dashboard.html       # ภาพรวมคลินิก
+│   ├── users.html           # จัดการบัญชีหมอ/พยาบาล
+│   ├── css/
+│   └── js/
+├── migrations/
+│   ├── workflow.sql         # ตารางคิว clinic_visits
+│   └── patient-hn.sql       # รหัส HN อัตโนมัติ
+├── data/
+│   └── starter-medicines.json  # รายการยาเริ่มต้น
+├── tests/                   # เทสต์ (node --test)
+├── scripts/                 # สคริปต์ช่วยงาน UI (apply-ui, preview-ui)
+├── artifacts/ui/            # ภาพหน้าจอ UI
 ├── schema.sql               # คำสั่งสร้างฐานข้อมูลทั้งหมด
+├── migrate.js               # อัปเกรดฐานข้อมูลเดิม (npm run migrate)
 ├── seed.js                  # สคริปต์สร้างผู้ใช้ admin เริ่มต้น
+├── seed-medicines.js        # เพิ่มรายการยาเริ่มต้น (npm run seed:medicines)
+├── set-medicine-prices.js   # ตั้งราคายาตัวอย่าง
 ├── server.js                # จุดเริ่มต้นแอปพลิเคชัน
 └── .env.example
 ```
+
+ดูรายละเอียดขั้นตอนการทำงานของหมอและพยาบาลได้ที่ [WORKFLOW.md](WORKFLOW.md)
 
 ## วิธีติดตั้งและรัน
 
@@ -34,31 +59,71 @@ clinic-flow/
 npm install
 ```
 
-### 2. ตั้งค่าฐานข้อมูล
-สร้างฐานข้อมูลด้วยไฟล์ schema.sql:
+### 2. ตั้งค่า environment variables
+```bash
+cp .env.example .env
+```
+แล้วแก้ค่า `DB_PASSWORD`, `JWT_SECRET` ให้ตรงกับเครื่องของคุณ (`JWT_SECRET` ควรเป็นข้อความสุ่มยาว ๆ และห้าม commit ไฟล์ `.env`)
+
+| ตัวแปร | ค่าเริ่มต้น | คำอธิบาย |
+|---|---|---|
+| `DB_HOST` | `localhost` | โฮสต์ MySQL |
+| `DB_USER` | `root` | ผู้ใช้ MySQL |
+| `DB_PASSWORD` | (ว่าง) | รหัสผ่าน MySQL |
+| `DB_NAME` | `clinic_flow` | ชื่อฐานข้อมูล |
+| `DB_PORT` | `3306` | พอร์ต MySQL |
+| `PORT` | `3000` | พอร์ตของเซิร์ฟเวอร์ |
+| `JWT_SECRET` | — | คีย์สำหรับเซ็น token (จำเป็น) |
+| `JWT_EXPIRES_IN` | `8h` | อายุของ token |
+
+### 3. ตั้งค่าฐานข้อมูล
+**ฐานข้อมูลใหม่:** สร้างฐานข้อมูล `clinic_flow` พร้อมตารางทั้งหมดด้วย schema.sql
 ```bash
 mysql -u root -p < schema.sql
 ```
 
-### 3. ตั้งค่า environment variables
+**ฐานข้อมูลเดิม (เวอร์ชันก่อนมีระบบคิว/HN):** รัน migration แทน ข้อมูลเดิมจะไม่ถูกลบ
 ```bash
-cp .env.example .env
+npm run migrate
 ```
-แล้วแก้ค่า `DB_PASSWORD`, `JWT_SECRET` ให้ตรงกับเครื่องของคุณ
 
 ### 4. สร้างผู้ใช้ admin เริ่มต้น
 ```bash
 node seed.js admin "Admin@123" "ผู้ดูแลระบบ"
 ```
+ควรเปลี่ยนรหัสผ่านหลังเข้าสู่ระบบครั้งแรก
 
-### 5. รันเซิร์ฟเวอร์
+### 5. เพิ่มรายการยาเริ่มต้น (ไม่บังคับ)
+```bash
+npm run seed:medicines       # เพิ่มยาจาก data/starter-medicines.json (สต๊อก 0, ราคา 0; ข้ามยาที่มีอยู่แล้ว)
+node set-medicine-prices.js  # ตั้งราคาตัวอย่าง (บาท/หน่วย) เฉพาะยาที่ราคายังเป็น 0
+```
+รายละเอียดรายการยาดูได้ที่ [data/STARTER-MEDICINES.md](data/STARTER-MEDICINES.md)
+
+### 6. รันเซิร์ฟเวอร์
 ```bash
 npm run dev     # โหมดพัฒนา (auto-reload ด้วย nodemon)
 # หรือ
 npm start       # โหมดปกติ
 ```
 
-เซิร์ฟเวอร์จะรันที่ `http://localhost:3000`
+เปิดเบราว์เซอร์ที่ `http://localhost:3000` แล้วเข้าสู่ระบบด้วยบัญชี admin จากนั้นสร้างบัญชีหมอ/พยาบาลได้ที่หน้า `/users.html`
+
+## หน้าจอตามบทบาท
+
+| บทบาท | หน้าหลัก | สิ่งที่ทำได้ |
+|---|---|---|
+| admin (เจ้าของคลินิก) | `/doctor.html` | ทุกอย่างที่หมอทำได้ และจัดการบัญชีผู้ใช้ |
+| doctor | `/doctor.html` | ตรวจ วินิจฉัย สั่งยา จัดการบัญชีผู้ใช้ |
+| nurse | `/nurse.html` | ลงทะเบียนผู้ป่วย บันทึกก่อนตรวจ จ่ายยาและตัดสต๊อก |
+
+ทุกบทบาทเข้าถึงหน้าผู้ป่วย ประวัติการรักษา สต๊อกยา และ Dashboard ได้
+
+## การทดสอบ
+```bash
+npm test
+```
+เทสต์ใช้ฐานข้อมูลจำลอง ไม่ต้องเชื่อมต่อ MySQL ครอบคลุมสิทธิ์ตามบทบาท ขั้นตอนตรวจรักษา/จ่ายยา และการคำนวณอายุ/BMI
 
 ## สรุป API Endpoints
 
@@ -99,11 +164,8 @@ curl http://localhost:3000/api/patients \
 ```
 
 ## ขั้นตอนถัดไปที่แนะนำ
-- ออกแบบ ER Diagram ให้ตรงกับ schema.sql (แจ้งได้หากต้องการให้ช่วยทำ)
-- เชื่อมต่อ Frontend (เช่น React) เข้ากับ API ชุดนี้
+- ออกแบบ ER Diagram ให้ตรงกับ schema.sql
 - เพิ่ม validation ที่ละเอียดขึ้น (เช่นด้วย Joi หรือ express-validator)
-- เพิ่ม unit test / integration test
-- ทำ rate limiting และ logging สำหรับ production
-
-# Clinic_Flow
-7ad86bd4ed7350915492d00592ad4d316d814e90
+- เพิ่ม integration test กับฐานข้อมูล MySQL จริง
+- ทำ rate limiting (โดยเฉพาะ `/api/auth/login`) และ logging สำหรับ production
+- จำกัด CORS เฉพาะโดเมนที่ใช้งานจริง และไม่ส่งรายละเอียด error ภายในกลับไปให้ client

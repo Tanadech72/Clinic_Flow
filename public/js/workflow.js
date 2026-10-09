@@ -78,7 +78,45 @@
   });
   function info(v) {
     const vs = vitals(v);
-    return `<section class="patient-summary">${patientSummary(v)}</section><p><strong>อาการครั้งนี้:</strong> ${escape(v.symptoms || '-')}</p><div class="meta"><span>BP ${escape(vs.bp || '-')}</span><span>ชีพจร ${escape(vs.pulse || '-')}</span><span>อุณหภูมิ ${escape(vs.temp || '-')} °C</span></div>${bodyMeasurements(vs)}`;
+    return `<div class="visit-info">${hasText(v.allergies) ? `<div class="flags"><span class="flag danger">⚠ แพ้ยา: ${escape(v.allergies)}</span></div>` : ''}<section class="patient-summary">${patientSummary(v)}</section><div class="symptom"><small>อาการครั้งนี้</small><p>${escape(v.symptoms || '-')}</p></div>${vitalChips(vs)}</div>`;
+  }
+  const hasText = value => Boolean(value && !['-', '–', 'ไม่มี', 'none'].includes(String(value).trim().toLowerCase()));
+  const clock = value => { const d = new Date(value); return isNaN(d) ? '' : d.toLocaleTimeString('th-TH', {hour: '2-digit', minute: '2-digit'}); };
+  function waited(value) {
+    const minutes = Math.floor((Date.now() - new Date(value)) / 60000);
+    if (!(minutes >= 0)) return '';
+    return minutes < 60 ? `รอ ${minutes} นาที` : `รอ ${Math.floor(minutes / 60)} ชม. ${minutes % 60} นาที`;
+  }
+  function vitalChips(vs) {
+    const bmi = PatientMetrics.bmi(vs.weight_kg, vs.height_cm);
+    const systolic = Number(String(vs.bp || '').split('/')[0]);
+    const chips = [
+      ['ความดัน', vs.bp, 'mmHg', systolic >= 140 || (systolic > 0 && systolic < 90)],
+      ['ชีพจร', vs.pulse, '/นาที', Number(vs.pulse) > 100 || (Number(vs.pulse) > 0 && Number(vs.pulse) < 50)],
+      ['อุณหภูมิ', vs.temp, '°C', Number(vs.temp) >= 37.5],
+      ['น้ำหนัก', vs.weight_kg, 'กก.', false],
+      ['ส่วนสูง', vs.height_cm, 'ซม.', false],
+      ['BMI', bmi === null ? '' : bmi.toFixed(1), '', bmi !== null && (bmi >= 30 || bmi < 18.5)],
+    ];
+    return `<div class="vital-chips">${chips.map(([label, value, unit, alert]) => `<span class="vital${alert ? ' alert-high' : ''}${hasText(value) ? '' : ' empty-value'}"><small>${label}</small><b>${hasText(value) ? escape(value) : '–'}</b>${hasText(value) && unit ? `<i>${unit}</i>` : ''}</span>`).join('')}</div>`;
+  }
+  function visitCard(v, index) {
+    const vs = vitals(v);
+    const age = PatientMetrics.age(v.date_of_birth);
+    const gender = {male: 'ชาย', female: 'หญิง', other: 'อื่น ๆ'}[v.gender] || 'ไม่ระบุเพศ';
+    const facts = [escape(v.hn_code), gender, age === null ? 'ไม่ระบุอายุ' : `${age} ปี`, v.blood_type ? `กรุ๊ป ${escape(v.blood_type)}` : ''].filter(Boolean).join(' · ');
+    const time = v.status === 'completed' ? `เสร็จ ${clock(v.dispensed_at)}` : `${clock(v.created_at)} · ${waited(v.created_at)}`;
+    const flags = `${hasText(v.allergies) ? `<span class="flag danger">⚠ แพ้ยา: ${escape(v.allergies)}</span>` : '<span class="flag ok">ไม่มีประวัติแพ้ยา</span>'}${hasText(v.underlying_conditions) ? `<span class="flag warn">โรคประจำตัว: ${escape(v.underlying_conditions)}</span>` : ''}`;
+    const action = doctor && v.status === 'waiting' ? `<button data-treat="${v.id}">ตรวจรักษา</button>`
+      : !doctor && v.status === 'ready' ? `<button data-dispense="${v.id}">${v.prescriptions.length ? 'ตรวจสอบและจ่ายยา' : 'ปิดคิว · ไม่มียา'}</button>` : '';
+    return `<article class="visit-card status-${v.status}">
+      <header class="visit-head"><span class="queue-no" aria-label="ลำดับคิว">${index + 1}</span><div class="who"><h3>${escape(v.prefix || '')}${escape(v.first_name)} ${escape(v.last_name)}</h3><p>${facts}</p></div><div class="visit-status"><span class="tag ${v.status}">${labels[v.status]}</span><small>${time}</small></div></header>
+      <div class="flags">${flags}</div>
+      <div class="symptom"><small>อาการสำคัญ</small><p>${escape(v.symptoms || '-')}</p></div>
+      ${vitalChips(vs)}
+      ${v.diagnosis ? `<div class="order"><p><small>การวินิจฉัย</small>${escape(v.diagnosis)}</p>${hasText(v.treatment_notes) ? `<p><small>คำสั่งแพทย์</small>${escape(v.treatment_notes)}</p>` : ''}<p class="muted">แพทย์: ${escape(v.doctor_name || '-')} · ยา ${v.prescriptions.length} รายการ</p>${prescriptions(v.prescriptions)}</div>` : ''}
+      <footer class="visit-actions"><button class="secondary" data-history="${v.patient_id}">ดูประวัติ</button>${action}</footer>
+    </article>`;
   }
   function prescriptions(items) {
     if (!items.length) return '<p class="muted">ไม่มีรายการยา</p>';
@@ -91,9 +129,10 @@
       if (index === step) span.setAttribute('aria-current', 'step');
       else span.removeAttribute('aria-current');
     });
-    $('filters').innerHTML = `${!doctor ? '<button id="newIntake">+ บันทึกก่อนตรวจ</button><a class="button secondary" href="/patients.html">ลงทะเบียนผู้ป่วยใหม่</a>' : ''}${Object.keys(labels).map(s => `<button class="${filter === s ? 'active' : 'secondary'}" data-filter="${s}">${labels[s]} (${visits.filter(v => v.status === s).length})</button>`).join('')}<button class="secondary" id="refresh">รีเฟรชคิว</button>`;
+    const hints = { waiting: doctor ? 'ผู้ป่วยที่พร้อมให้ตรวจ' : 'ส่งเข้าคิวแล้ว รอหมอตรวจ', ready: doctor ? 'ส่งต่อพยาบาลแล้ว' : 'หมอสั่งยาแล้ว รอจ่าย', completed: 'จ่ายยาและปิดคิวแล้ว' };
+    $('filters').innerHTML = `<div class="stat-tiles" role="tablist" aria-label="สถานะคิว">${Object.keys(labels).map(s => `<button type="button" role="tab" aria-selected="${filter === s}" class="stat-tile tile-${s}${filter === s ? ' active' : ''}" data-filter="${s}"><span>${labels[s]}</span><b>${visits.filter(v => v.status === s).length}</b><small>${hints[s]}</small></button>`).join('')}</div><div class="toolbar-actions">${!doctor ? '<button id="newIntake">+ บันทึกก่อนตรวจ</button><a class="button secondary" href="/patients.html">ลงทะเบียนผู้ป่วยใหม่</a>' : ''}<button class="secondary" id="refresh">↻ รีเฟรชคิว</button></div>`;
     const rows = visits.filter(v => v.status === filter);
-    $('queue').innerHTML = rows.length ? rows.map(v => `<article class="card"><div class="card-top"><div>${info(v)}</div><span class="tag ${v.status}">${labels[v.status]}</span></div>${v.diagnosis ? `<p><strong>การวินิจฉัย:</strong> ${escape(v.diagnosis)}<br><strong>คำสั่งแพทย์:</strong> ${escape(v.treatment_notes || '-')}<br><span class="muted">แพทย์: ${escape(v.doctor_name)}</span></p>${prescriptions(v.prescriptions)}` : ''}<div class="actions"><button class="secondary" data-history="${v.patient_id}">ดูประวัติ</button>${doctor && v.status === 'waiting' ? `<button data-treat="${v.id}">ตรวจรักษา</button>` : ''}${!doctor && v.status === 'ready' ? `<button data-dispense="${v.id}">${v.prescriptions.length ? 'ตรวจสอบและจ่ายยา' : 'ปิดคิว · ไม่มียา'}</button>` : ''}</div></article>`).join('') : `<div class="empty"><h3>${filter === 'completed' ? 'ยังไม่มีคิวที่เสร็จสิ้นวันนี้' : `ไม่มีผู้ป่วย${labels[filter]}`}</h3><p>${doctor ? 'เมื่อพยาบาลบันทึกข้อมูลก่อนตรวจ คิวผู้ป่วยจะแสดงที่นี่' : filter === 'ready' ? 'เมื่อหมอตรวจเสร็จ รายการจ่ายยาจะแสดงที่นี่' : 'เลือก “บันทึกก่อนตรวจ” เพื่อส่งผู้ป่วยเข้าคิว'}</p></div>`;
+    $('queue').innerHTML = rows.length ? `<div class="visit-grid">${rows.map(visitCard).join('')}</div>` :`<div class="empty"><h3>${filter === 'completed' ? 'ยังไม่มีคิวที่เสร็จสิ้นวันนี้' : `ไม่มีผู้ป่วย${labels[filter]}`}</h3><p>${doctor ? 'เมื่อพยาบาลบันทึกข้อมูลก่อนตรวจ คิวผู้ป่วยจะแสดงที่นี่' : filter === 'ready' ? 'เมื่อหมอตรวจเสร็จ รายการจ่ายยาจะแสดงที่นี่' : 'เลือก “บันทึกก่อนตรวจ” เพื่อส่งผู้ป่วยเข้าคิว'}</p></div>`;
   }
   async function refresh() { try { visits = (await api('/api/visits')).data; render(); notice(); } catch (err) { notice(err); $('queue').innerHTML = '<div class="card empty">โหลดคิวไม่สำเร็จ กรุณาลองรีเฟรช</div>'; } }
   let searchSerial = 0;

@@ -41,6 +41,8 @@
     .btn-logout:hover { background: #dc2626; }
   </style>
 <link rel="stylesheet" href="/css/app-ui.css?v=2">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="/css/theme.css?v=1">
 </head>
 <body>
 
@@ -88,8 +90,8 @@
       </div>
 
       <!-- ตารางข้อมูล -->
-      <div class="section-block">
-        <h2>⚠️ ยาคงเหลือต่ำกว่าเกณฑ์ (10 รายการแรก)</h2>
+      <div class="section-block tone-danger">
+        <h2>ยาคงเหลือต่ำกว่าเกณฑ์ (10 รายการแรก)</h2>
         <table>
           <thead>
             <tr>
@@ -105,8 +107,8 @@
         </table>
       </div>
 
-      <div class="section-block">
-        <h2>⏳ ยาใกล้หมดอายุ (10 รายการแรก)</h2>
+      <div class="section-block tone-warn">
+        <h2>ยาใกล้หมดอายุ (10 รายการแรก)</h2>
         <table>
           <thead>
             <tr>
@@ -123,7 +125,7 @@
       </div>
 
       <div class="section-block">
-        <h2>🏥 ประวัติการรักษาล่าสุด</h2>
+        <h2>ประวัติการรักษาล่าสุด</h2>
         <table>
           <thead>
             <tr>

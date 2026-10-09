@@ -50,6 +50,8 @@
     .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
   </style>
 <link rel="stylesheet" href="/css/app-ui.css?v=2">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="/css/theme.css?v=1">
 </head>
 <body>
 
@@ -74,7 +76,7 @@
         <div class="search-group">
           <input type="text" id="searchInput" class="search-input" placeholder="ค้นหารหัสยา หรือ ชื่อยา..." oninput="fetchMedicines()">
           <label class="filter-label">
-            <input type="checkbox" id="lowStockOnly" onchange="fetchMedicines()"> ⚠️ แสดงเฉพาะยาใกล้หมดสต๊อก
+            <input type="checkbox" id="lowStockOnly" onchange="fetchMedicines()"> แสดงเฉพาะยาใกล้หมดสต๊อก
           </label>
         </div>
         <button class="btn btn-primary" onclick="openModal()">+ เพิ่มยาใหม่</button>
@@ -162,7 +164,7 @@
   <!-- Modal 2: เติมสต๊อกยา (Stock-In) -->
   <div class="modal" id="stockInModal">
     <div class="modal-content">
-      <h2>📥 เติมสต๊อกยา</h2>
+      <h2>เติมสต๊อกยา</h2>
       <p id="stockInMedicineName" style="font-weight:bold; color:#0284c7;"></p>
       <form id="stockInForm" onsubmit="saveStockIn(event)">
         <input type="hidden" id="stock_in_id">
@@ -188,7 +190,7 @@
   <!-- Modal 3: ประวัติการเคลื่อนไหวสต๊อก (Transactions) -->
   <div class="modal" id="historyModal">
     <div class="modal-content" style="width:700px;">
-      <h2>📜 ประวัติการเคลื่อนไหวสต๊อก</h2>
+      <h2>ประวัติการเคลื่อนไหวสต๊อก</h2>
       <p id="historyMedicineName" style="font-weight:bold; color:#0284c7;"></p>
       <div style="max-height: 350px; overflow-y: auto;">
         <table>
@@ -252,7 +254,7 @@
               <td>${m.reorder_level}</td>
               <td>${formatDate(m.expiry_date)}</td>
               <td>
-                <button class="btn btn-success btn-sm" onclick="openStockInModal(${m.id}, '${m.name}')">📥 เติมสต๊อก</button>
+                <button class="btn btn-success btn-sm" onclick="openStockInModal(${m.id}, '${m.name}')">+ เติมสต๊อก</button>
                 <button class="btn btn-warning btn-sm" onclick="editMedicine(${m.id})">แก้ไข</button>
                 <button class="btn btn-info btn-sm" onclick="viewHistory(${m.id}, '${m.name}')">ประวัติ</button>
               </td>

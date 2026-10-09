@@ -1,0 +1,120 @@
+/* หน้าทำงานหมอและพยาบาล: แถบสถานะคิวและการ์ดคิวกะทัดรัด (สี/ฟอนต์มาจาก theme.css) */
+body[data-workspace] > main { padding:32px 40px 48px; }
+body[data-workspace] > main > header { padding-bottom:20px; }
+
+/* ขั้นตอน 1-2-3 */
+body[data-workspace] .flow { display:flex; gap:8px; border:0; background:transparent; margin:0 0 22px; overflow:visible; }
+body[data-workspace] .flow span {
+  flex:1; display:flex; align-items:center; gap:10px; padding:10px 16px; border:1px solid var(--line);
+  border-radius:999px; background:var(--surface); color:var(--soft); font-size:13px;
+}
+body[data-workspace] .flow span::before { content:''; width:8px; height:8px; border-radius:50%; background:#cfd8d5; flex-shrink:0; }
+body[data-workspace] .flow span:last-child { border:1px solid var(--line); }
+body[data-workspace] .flow .current { background:var(--primary-tint); border-color:#bfe0da; color:var(--primary-dark); font-weight:600; }
+body[data-workspace] .flow .current::before { background:var(--primary); box-shadow:0 0 0 4px #cdeae5; }
+
+/* แถบสถานะคิว + ปุ่ม */
+body[data-workspace] .toolbar { display:block; border:0; padding:0; margin:0 0 22px; }
+.stat-tiles { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; }
+body[data-workspace] .stat-tile {
+  display:grid; grid-template-columns:1fr auto; align-items:center; text-align:left; gap:2px 12px;
+  min-height:0; padding:16px 20px; border:1px solid var(--line); border-radius:16px;
+  background:var(--surface); color:var(--ink); font-weight:400; box-shadow:var(--shadow);
+}
+body[data-workspace] .stat-tile:hover { background:var(--surface); border-color:#c9d6d2; box-shadow:var(--shadow-hover); }
+.stat-tile span { font-size:14px; font-weight:600; }
+.stat-tile b { grid-row:span 2; font-size:32px; line-height:1; font-variant-numeric:tabular-nums; }
+.stat-tile small { color:var(--muted); font-size:12px; }
+.tile-waiting b { color:var(--waiting); } .tile-ready b { color:var(--ready); } .tile-completed b { color:var(--done); }
+body[data-workspace] .stat-tile.active { border-width:2px; padding:15px 19px; }
+body[data-workspace] .tile-waiting.active { border-color:var(--waiting); background:var(--waiting-tint); }
+body[data-workspace] .tile-ready.active { border-color:var(--ready); background:var(--ready-tint); }
+body[data-workspace] .tile-completed.active { border-color:var(--done); background:var(--done-tint); }
+.toolbar-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:16px; }
+body[data-workspace] #refresh { margin-left:auto; }
+
+/* การ์ดคิว */
+.visit-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(440px,1fr)); gap:16px; align-items:start; }
+.visit-card {
+  display:flex; flex-direction:column; gap:14px; background:var(--surface); border:1px solid var(--line);
+  border-radius:18px; padding:20px 22px; box-shadow:var(--shadow); border-top:4px solid var(--waiting);
+  transition:box-shadow .18s;
+}
+.visit-card:hover { box-shadow:var(--shadow-hover); }
+.visit-card.status-ready { border-top-color:var(--ready); }
+.visit-card.status-completed { border-top-color:var(--done); }
+.visit-head { display:flex; align-items:center; gap:14px; padding:0; }
+.queue-no {
+  display:grid; place-items:center; flex-shrink:0; width:44px; height:44px; border-radius:13px;
+  background:var(--waiting-tint); color:var(--waiting); font-size:18px; font-weight:700; font-variant-numeric:tabular-nums;
+}
+.status-ready .queue-no { background:var(--ready-tint); color:var(--ready); }
+.status-completed .queue-no { background:var(--done-tint); color:var(--done); }
+.who { flex:1; min-width:0; }
+.who h3 { margin:0; font-size:17px; line-height:1.4; overflow-wrap:anywhere; }
+.who p { margin:2px 0 0; color:var(--muted); font-size:13px; line-height:1.5; }
+.visit-status { display:flex; flex-direction:column; align-items:flex-end; gap:4px; text-align:right; }
+.visit-status small { color:var(--soft); font-size:12px; white-space:nowrap; }
+body[data-workspace] .tag { border-radius:999px; padding:4px 12px; font-weight:600; background:var(--waiting-tint); color:var(--waiting); }
+body[data-workspace] .tag.ready { background:var(--ready-tint); color:var(--ready); }
+body[data-workspace] .tag.completed { background:var(--done-tint); color:var(--done); }
+.visit-card .flags { gap:8px; }
+.visit-card .flag { padding:5px 11px; }
+
+.symptom { background:#f7f9f8; border-radius:12px; padding:12px 14px; }
+.symptom small,.order small { display:block; color:var(--soft); font-size:12px; font-weight:600; margin-bottom:2px; }
+.symptom p { margin:0; line-height:1.65; overflow-wrap:anywhere; }
+
+.vital-chips { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:8px; }
+.vital { display:flex; flex-direction:column; padding:8px 10px; border:1px solid var(--line); border-radius:11px; min-width:0; }
+.vital small { color:var(--soft); font-size:11px; }
+.vital b { font-size:15px; font-variant-numeric:tabular-nums; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.vital i { font-style:normal; color:var(--soft); font-size:11px; }
+.vital.empty-value b { color:#b9c5c2; font-weight:400; }
+.vital.alert-high { background:var(--danger-tint); border-color:#f3d4cf; }
+.vital.alert-high b { color:var(--danger); }
+
+.order { border-top:1px dashed var(--line); padding-top:12px; }
+.order p { margin:0 0 8px; line-height:1.6; overflow-wrap:anywhere; }
+.order table { margin-top:4px; }
+.order th,.order td { padding:9px 10px; font-size:13px; }
+
+.visit-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:auto; padding-top:4px; }
+
+/* หน้าต่างบันทึก/ตรวจ/จ่ายยา */
+.visit-info { display:flex; flex-direction:column; gap:12px; margin-bottom:8px; }
+.visit-info .patient-summary { margin:0; }
+#dispenseDetails > p { background:#f7f9f8; border-radius:12px; padding:12px 14px; line-height:1.7; }
+body[data-workspace] dialog { padding:28px 30px; width:820px; }
+body[data-workspace] dialog h2 { font-size:20px; }
+body[data-workspace] dialog h3 { margin-top:22px; }
+body[data-workspace] .patient-summary > h3 { margin-top:0; }
+body[data-workspace] .medicine-row { background:#f7faf9; border:1px solid var(--line); border-radius:12px; padding:10px; }
+body[data-workspace] #dispenseForm > label { display:flex; gap:10px; align-items:center; background:var(--ready-tint); border:1px solid #f1dfba; padding:14px 16px; border-radius:12px; color:#6f4a10; }
+body[data-workspace] #historyDetails .card { border-radius:14px; padding:18px 20px; border-left:4px solid #a7d3cc; }
+
+@media(max-width:1100px) {
+  body[data-workspace] > main { padding:26px 24px 40px; }
+  .visit-grid { grid-template-columns:1fr; }
+}
+@media(max-width:760px) {
+  body[data-workspace] > main { padding:20px 16px 32px; }
+  body[data-workspace] .flow { gap:6px; }
+  body[data-workspace] .flow span { padding:8px 10px; font-size:11px; gap:6px; border-radius:12px; line-height:1.4; }
+  body[data-workspace] .flow span::before { display:none; }
+  .stat-tiles { gap:8px; }
+  body[data-workspace] .stat-tile { grid-template-columns:1fr; padding:12px; }
+  body[data-workspace] .stat-tile.active { padding:11px; }
+  .stat-tile b { grid-row:auto; font-size:26px; order:-1; }
+  .stat-tile span { font-size:12px; } .stat-tile small { display:none; }
+  .toolbar-actions > * { flex:1 1 auto; }
+  body[data-workspace] #refresh { margin-left:0; }
+  .visit-grid { grid-template-columns:minmax(0,1fr); }
+  .visit-card { padding:16px; }
+  .visit-head { flex-wrap:wrap; }
+  .visit-status { flex-direction:row; align-items:center; width:100%; justify-content:space-between; }
+  .vital-chips { grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .visit-actions > * { flex:1; }
+  body[data-workspace] dialog { padding:20px; border-radius:18px; }
+}
+@media(prefers-reduced-motion:reduce) { .visit-card { transition:none; } }

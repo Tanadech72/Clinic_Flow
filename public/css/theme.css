@@ -1,0 +1,133 @@
+/* ธีมกลางของทุกหน้า: โทนเขียวอมฟ้านุ่มตา คอนทราสต์อ่านง่าย (โหลดต่อจาก app-ui.css) */
+:root {
+  --app-font:'IBM Plex Sans Thai','Leelawadee UI',Tahoma,'Segoe UI',Arial,sans-serif;
+  --ink:#1d3439; --muted:#566b70; --soft:#8a9ca0;
+  --primary:#0f766e; --primary-dark:#0b5d57; --primary-tint:#e6f3f1;
+  --canvas:#f4f6f3; --surface:#fff; --line:#e3e9e6;
+  --waiting:#3b6fb6; --waiting-tint:#eaf1fb;
+  --ready:#b7791f; --ready-tint:#fdf4e3;
+  --done:#2f855a; --done-tint:#e8f5ed;
+  --danger:#b4473a; --danger-tint:#fdeeec;
+  --shadow:0 1px 3px #1d34390d; --shadow-hover:0 8px 24px #1d343914;
+}
+body { background:var(--canvas); color:var(--ink); font-size:15px; letter-spacing:.1px; }
+body, body * { font-family:var(--app-font); }
+::selection { background:#cdeae5; }
+
+/* แถบเมนูซ้าย */
+body > nav,body > .sidebar { background:var(--surface); border-right:0; box-shadow:1px 0 0 var(--line); }
+body > nav > strong::before,.sidebar-brand::before { background:linear-gradient(135deg,#14917f,var(--primary-dark)); box-shadow:0 4px 10px #0f766e40; }
+body > nav > p,.sidebar-role { color:var(--muted); }
+body > nav > a,.sidebar-menu li a { color:var(--muted); border-radius:12px; font-weight:500; }
+body > nav > a:hover,.sidebar-menu li a:hover { background:#f2f6f4; color:var(--ink); }
+body > nav > a.active,.sidebar-menu li a.active { background:var(--primary-tint); color:var(--primary-dark); font-weight:600; }
+body > nav > a::before,.sidebar-menu li a::before {
+  content:''; width:20px; height:20px; background:currentColor; opacity:.75;
+  -webkit-mask:var(--icon) center/contain no-repeat; mask:var(--icon) center/contain no-repeat;
+}
+body > nav > a.active::before,.sidebar-menu li a.active::before { opacity:1; }
+.nav-footer { color:var(--soft); }
+
+/* หัวหน้า */
+body > main,.main-wrapper { max-width:1500px; }
+h1,.top-header h1 { font-size:26px; letter-spacing:-.3px; color:var(--ink); }
+.muted,#subtitle,#welcomeMessage { color:var(--muted); }
+.page-eyebrow { color:var(--primary); letter-spacing:1.4px; }
+#logout,#logoutButton,.btn-logout { border-radius:11px; color:var(--muted); }
+
+/* การ์ด */
+.card,.table-card,.section-block,.record-card { border-radius:18px; border-color:var(--line); box-shadow:var(--shadow); }
+.record-card { border-left:4px solid #8fcac0; }
+.section-block h2 { display:flex; align-items:center; gap:10px; font-size:17px; }
+.section-block h2::before { content:''; width:6px; height:20px; border-radius:3px; background:var(--primary); }
+.section-block.tone-danger h2::before { background:var(--danger); }
+.section-block.tone-warn h2::before { background:var(--ready); }
+
+/* การ์ดสรุปตัวเลข */
+.summary-grid { gap:16px; }
+.summary-grid .card { border-top:4px solid var(--primary); min-height:0; padding:20px 22px; }
+.summary-grid .card::after { content:none; }
+.summary-grid .card h3 { color:var(--muted); font-size:14px; font-weight:600; margin-bottom:10px; }
+.summary-grid .number { font-size:36px; color:var(--primary-dark); font-variant-numeric:tabular-nums; }
+.summary-grid .card:nth-child(2) { border-top-color:var(--waiting); }.summary-grid .card:nth-child(2) .number { color:var(--waiting); }
+.summary-grid .card:has(.danger) { border-top-color:var(--danger); }.summary-grid .number.danger { color:var(--danger); }
+.summary-grid .card:has(.warning) { border-top-color:var(--ready); }.summary-grid .number.warning { color:var(--ready); }
+
+/* ตาราง */
+th,.prescription-table th { background:#f5f8f6; color:var(--muted); font-size:12.5px; font-weight:600; border-bottom:0; }
+thead th:first-child { border-radius:10px 0 0 10px; } thead th:last-child { border-radius:0 10px 10px 0; }
+td,.prescription-table td { color:var(--ink); border-bottom-color:#eef2f0; }
+tbody tr:hover { background:#f8faf9; }
+td[colspan] { color:var(--soft); }
+td.badge-danger,td.badge-normal { font-weight:600; font-variant-numeric:tabular-nums; }
+td.badge-danger { color:var(--danger); } td.badge-normal { color:var(--done); }
+.table-card td:last-child { white-space:nowrap; }
+.patient-select-group label,.search-group label { margin:0; }
+
+/* ปุ่ม */
+button,.button,.btn { border-radius:11px; font-weight:600; }
+.btn-sm { border-radius:9px; }
+button:not(.secondary):not(.stat-tile):not(#logout):not(#logoutButton):not(.btn-logout):not(.btn-sm):not([class*=btn-]):not(.btn) { box-shadow:0 2px 6px #0f766e33; }
+.btn-primary { background:var(--primary); color:#fff; box-shadow:0 2px 6px #0f766e33; }
+.btn-primary:hover { background:var(--primary-dark); }
+.btn-success { background:var(--done-tint); color:var(--done); border-color:#cfe8da; }
+.btn-success:hover { background:#d9efe2; }
+.btn-warning { background:#fff; color:var(--ink); border-color:var(--line); }
+.btn-warning:hover { background:#f2f6f4; }
+.btn-info { background:var(--waiting-tint); color:var(--waiting); border-color:#d6e3f5; }
+.btn-info:hover { background:#dce8f8; }
+.btn-danger { background:var(--danger-tint); color:var(--danger); border-color:#f3d4cf; }
+
+/* ช่องกรอก */
+input,select,textarea,.search-input,.select-input { border-radius:11px; border-color:#d6e0dc; background:#fcfdfc; }
+input:focus,select:focus,textarea:focus { border-color:var(--primary); box-shadow:0 0 0 3px #d3ece8; background:#fff; }
+label,.form-group label { color:var(--ink); }
+input[readonly] { background:#eef4f2; color:#4c6f6a; }
+
+/* ป้าย */
+.flag { display:inline-block; font-size:13px; line-height:1.5; padding:4px 10px; border-radius:9px; overflow-wrap:anywhere; }
+.flag.danger { background:var(--danger-tint); color:var(--danger); font-weight:600; border:1px solid #f3d4cf; }
+.flag.warn { background:var(--ready-tint); color:#8a5a12; border:1px solid #f1dfba; }
+.flag.ok { background:#f1f5f3; color:var(--muted); }
+.flags { display:flex; flex-wrap:wrap; gap:6px; }
+.vital-badge { display:inline-block; background:var(--primary-tint); border:1px solid #cfe7e2; color:var(--primary-dark); border-radius:999px; padding:4px 12px; margin:0 6px 6px 0; font-size:12.5px; font-weight:500; }
+
+/* หน้าต่าง */
+.modal { background:#1d343966; backdrop-filter:blur(3px); }
+.modal-content,dialog { border-radius:22px; border-color:var(--line); }
+dialog::backdrop { background:#1d343966; }
+.empty { border-radius:18px; border-color:#d5e0dc; color:var(--muted); }
+.empty::before { background:var(--primary-tint); color:var(--primary); }
+.empty h3 { color:var(--ink); }
+.patient-summary { background:#f7faf9; border-color:var(--line); border-radius:16px; }
+.medicine-section { background:#f7faf9; border-color:var(--line); border-radius:14px; }
+
+/* หน้าเข้าสู่ระบบ */
+.login-page { background:radial-gradient(circle at 15% 10%,#dff1ec 0,transparent 45%),radial-gradient(circle at 85% 90%,#e3eef8 0,transparent 45%),var(--canvas); }
+.login-card { border:1px solid var(--line); border-radius:24px; box-shadow:0 24px 60px #1d343914; padding:44px 36px; }
+.login-card h1 { display:flex; align-items:center; justify-content:center; gap:12px; color:var(--ink); font-size:30px; }
+.login-card h1::before {
+  content:'+'; display:grid; place-items:center; width:44px; height:44px; border-radius:14px; font:600 32px/1 Arial,sans-serif;
+  color:#fff; background:linear-gradient(135deg,#14917f,var(--primary-dark)); box-shadow:0 4px 10px #0f766e40;
+}
+.login-card > p { color:var(--muted); }
+#loginForm label { color:var(--ink); font-size:14px; }
+#loginForm input { border-radius:12px; border-color:#d6e0dc; background:#fcfdfc; font-size:15px; }
+#loginForm input:focus { border-color:var(--primary); box-shadow:0 0 0 3px #d3ece8; }
+#loginForm button { border-radius:12px; background:var(--primary); box-shadow:0 4px 12px #0f766e40; }
+#loginForm button:hover { background:var(--primary-dark); }
+#message.error { color:var(--danger); } #message.success { color:var(--done); }
+
+@media(max-width:760px) {
+  body > nav > a::before,.sidebar-menu li a::before { width:17px; height:17px; }
+  .summary-grid .number { font-size:30px; }
+}
+
+/* ไอคอนเมนู (เส้น SVG ใช้สีตามตัวอักษร) */
+body > nav > a[href$="doctor.html"],.sidebar-menu a[href$="doctor.html"] { --icon:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M22%2012h-4l-3%209L9%203l-3%209H2%27%2F%3E%3C%2Fsvg%3E"); }
+body > nav > a[href$="nurse.html"],.sidebar-menu a[href$="nurse.html"] { --icon:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M22%2012h-4l-3%209L9%203l-3%209H2%27%2F%3E%3C%2Fsvg%3E"); }
+body > nav > a[href$="patients.html"],.sidebar-menu a[href$="patients.html"] { --icon:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M16%2021v-2a4%204%200%200%200-4-4H6a4%204%200%200%200-4%204v2%27%2F%3E%3Ccircle%20cx%3D%279%27%20cy%3D%277%27%20r%3D%274%27%2F%3E%3Cpath%20d%3D%27M22%2021v-2a4%204%200%200%200-3-3.87M16%203.13a4%204%200%200%201%200%207.75%27%2F%3E%3C%2Fsvg%3E"); }
+body > nav > a[href$="records.html"],.sidebar-menu a[href$="records.html"] { --icon:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M14%202H6a2%202%200%200%200-2%202v16a2%202%200%200%200%202%202h12a2%202%200%200%200%202-2V8z%27%2F%3E%3Cpath%20d%3D%27M14%202v6h6M16%2013H8M16%2017H8M10%209H8%27%2F%3E%3C%2Fsvg%3E"); }
+body > nav > a[href$="inventory.html"],.sidebar-menu a[href$="inventory.html"] { --icon:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27m10.5%2020.5%2010-10a4.95%204.95%200%201%200-7-7l-10%2010a4.95%204.95%200%201%200%207%207Z%27%2F%3E%3Cpath%20d%3D%27m8.5%208.5%207%207%27%2F%3E%3C%2Fsvg%3E"); }
+body > nav > a[href$="dashboard.html"],.sidebar-menu a[href$="dashboard.html"] { --icon:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Crect%20x%3D%273%27%20y%3D%273%27%20width%3D%277%27%20height%3D%279%27%20rx%3D%271%27%2F%3E%3Crect%20x%3D%2714%27%20y%3D%273%27%20width%3D%277%27%20height%3D%275%27%20rx%3D%271%27%2F%3E%3Crect%20x%3D%2714%27%20y%3D%2712%27%20width%3D%277%27%20height%3D%279%27%20rx%3D%271%27%2F%3E%3Crect%20x%3D%273%27%20y%3D%2716%27%20width%3D%277%27%20height%3D%275%27%20rx%3D%271%27%2F%3E%3C%2Fsvg%3E"); }
+body > nav > a[href$="users.html"],.sidebar-menu a[href$="users.html"] { --icon:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M16%2021v-2a4%204%200%200%200-4-4H6a4%204%200%200%200-4%204v2%27%2F%3E%3Ccircle%20cx%3D%279%27%20cy%3D%277%27%20r%3D%274%27%2F%3E%3Cpath%20d%3D%27M19%208v6M22%2011h-6%27%2F%3E%3C%2Fsvg%3E"); }
