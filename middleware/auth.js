@@ -1,3 +1,5 @@
+// Middleware ตรวจสอบการเข้าสู่ระบบ (authenticate) และสิทธิ์ตามบทบาท (authorize)
+
 const jwt = require('jsonwebtoken');
 const pool = require('../config/db');
 require('dotenv').config();
@@ -11,10 +13,12 @@ async function authenticate(req, res, next) {
     return res.status(401).json({ message: 'ไม่พบ token กรุณาเข้าสู่ระบบ' });
   }
 
+  // header มีรูปแบบ 'Bearer <token>' จึงตัดเอาเฉพาะส่วน token
   const token = authHeader.split(' ')[1];
   let decoded;
 
   try {
+    // ตรวจลายเซ็นและวันหมดอายุของ token ถ้าถูกปลอมหรือหมดอายุจะเข้า catch
     decoded = jwt.verify(token, process.env.JWT_SECRET);
   } catch (err) {
     return res.status(401).json({ message: 'Token ไม่ถูกต้องหรือหมดอายุ' });
@@ -37,6 +41,7 @@ async function authenticate(req, res, next) {
 
 // ตรวจสอบสิทธิ์ตาม role เช่น authorize('admin', 'doctor')
 function authorize(...allowedRoles) {
+  // คืนค่าเป็น middleware ที่ตรวจว่า role ของผู้ใช้อยู่ในรายการที่อนุญาตหรือไม่
   return (req, res, next) => {
     if (!req.user || !allowedRoles.includes(req.user.role)) {
       return res.status(403).json({ message: 'คุณไม่มีสิทธิ์เข้าถึงส่วนนี้' });
@@ -45,4 +50,6 @@ function authorize(...allowedRoles) {
   };
 }
 
+// วิธีใช้ใน route: router.get('/', authenticate, authorize('admin'), handler)
+// authenticate ต้องมาก่อน authorize เสมอ เพราะ authorize ใช้ req.user
 module.exports = { authenticate, authorize };

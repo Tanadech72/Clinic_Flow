@@ -1,14 +1,19 @@
+// เทสต์การคำนวณอายุ/BMI และการสร้างเลข HN อัตโนมัติของ API ผู้ป่วย (ใช้ฐานข้อมูลจำลอง)
+// รันด้วย: npm test
+
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const metrics = require('../public/js/patient-metrics');
 const express = require('express');
 const jwt = require('jsonwebtoken');
 process.env.JWT_SECRET = 'patient-metrics-test';
+// ตัวแปรจำลองสถานะฐานข้อมูล: คำสั่ง SQL ที่ถูกเรียก, ลำดับเลข HN, จำนวน commit/rollback
 let queries = [];
 let lastNumber = 0, highest = 3, failInsert = false, commits = 0, rollbacks = 0;
 let transactionTail = Promise.resolve();
 const sample = {id: 1, date_of_birth:'2000-10-10', weight_kg:'70.00', height_cm:'175.00'};
 const dbPath = require.resolve('../config/db');
+// ฐานข้อมูลจำลอง (mock): ตอบกลับตามรูปแบบคำสั่ง SQL โดยไม่ต้องต่อ MySQL จริง
 const query = async (sql, values) => {
   if (sql.includes('FROM users')) return [[{id:values[0], role:'nurse'}]]; // authenticate middleware
   queries.push({sql, values});
@@ -16,6 +21,8 @@ const query = async (sql, values) => {
   if (sql.includes('SELECT')) return [[sample]];
   return [{affectedRows:1, insertId:1}];
 };
+// แทนที่ config/db.js ด้วยฐานข้อมูลจำลอง ก่อนโหลด routes
+// transaction จำลองเข้าคิวทีละรายการ เหมือน FOR UPDATE ของ MySQL เพื่อทดสอบการลงทะเบียนพร้อมกัน
 require.cache[dbPath] = {id:dbPath, filename:dbPath, loaded:true, exports:{query, getConnection:async () => {
   let unlock, staged;
   return {
@@ -35,13 +42,16 @@ require.cache[dbPath] = {id:dbPath, filename:dbPath, loaded:true, exports:{query
     rollback:async () => {rollbacks++;unlock();}, release() {}
   };
 }}};
+// เปิดเซิร์ฟเวอร์ทดสอบเฉพาะ API ผู้ป่วย ที่ port ว่างแบบสุ่ม (0)
 const app = express(); app.use(express.json()); app.use('/api/patients', require('../routes/patients'));
 const server = app.listen(0,'127.0.0.1');
 test.after(() => server.close());
+// ตัวช่วยเรียก API ในฐานะพยาบาล
 async function request(method, path, body) {
   if (!server.listening) await new Promise(resolve => server.once('listening',resolve));
   return fetch(`http://127.0.0.1:${server.address().port}/api/patients${path}`, {method, headers:{Authorization:`Bearer ${jwt.sign({id:2,role:'nurse'},process.env.JWT_SECRET)}`, 'Content-Type':'application/json'}, ...(body ? {body:JSON.stringify(body)} : {})});
 }
+// คำนวณอายุ: ก่อน/หลังวันเกิด ปีอธิกสุรทิน วันที่ไม่มีจริง และวันในอนาคต
 test('age tracks birthdays, valid leap dates, missing and future dates', () => {
   assert.equal(metrics.age('2000-10-10','2026-10-09'),25);
   assert.equal(metrics.age('2000-10-10','2026-10-10'),26);
@@ -52,6 +62,7 @@ test('age tracks birthdays, valid leap dates, missing and future dates', () => {
   assert.equal(metrics.age('2025-02-29','2026-10-09'),null);
   assert.equal(metrics.age('2024-02-29','2026-10-09'),2);
 });
+// คำนวณ BMI และกรณีกรอกข้อมูลไม่ครบ
 test('BMI converts centimetres to metres and handles partial inputs', () => {
   assert.equal(metrics.bmi(70,175),22.9);
   for (const [w,h] of [[null,175],[70,null],[0,175],[70,0],[-70,175],['invalid',175]]) assert.equal(metrics.bmi(w,h),null);
@@ -59,6 +70,7 @@ test('BMI converts centimetres to metres and handles partial inputs', () => {
   assert.equal(metrics.measurement('70.25',999),70.25);
   for (const v of [true,[],{},-1,0,'no',1.234,1000]) assert.throws(()=>metrics.measurement(v,999));
 });
+// API ผู้ป่วยต้องส่งอายุกลับ และไม่อ่าน/เขียนน้ำหนัก-ส่วนสูงในตารางผู้ป่วยแล้ว
 test('patient API retains age and no longer reads or writes intake measurements', async () => {
   const list = await (await request('GET','')).json();
   assert.equal(list.data[0].age, metrics.age(sample.date_of_birth));
@@ -81,6 +93,7 @@ test('patient API retains age and no longer reads or writes intake measurements'
     queries=[]; assert.equal((await request('PUT','/1',body)).status,400); assert.equal(queries.length,0);
   }
 });
+// เลข HN อัตโนมัติ: ไม่สนเลขที่ส่งมาเอง, ต่อจากเลขสูงสุด, ลงทะเบียนพร้อมกันไม่ได้เลขซ้ำ, ผิดพลาดแล้วไม่เสียเลข
 test('automatic HN ignores manual input, advances existing sequence, serializes requests and rolls back failures', async () => {
   lastNumber=0; highest=3; queries=[];
   const body={first_name:'Test',last_name:'Patient',gender:'other',hn_code:'USER-SUPPLIED'};

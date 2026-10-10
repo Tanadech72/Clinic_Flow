@@ -1,11 +1,16 @@
+// API ข้อมูลผู้ป่วย (/api/patients): ค้นหา ดูรายบุคคล ลงทะเบียน (สร้าง HN อัตโนมัติ) และแก้ไข
+
 const express = require('express');
 const pool = require('../config/db');
 const { authenticate, authorize } = require('../middleware/auth');
 const metrics = require('../public/js/patient-metrics');
+// แปลงข้อมูลผู้ป่วยก่อนส่งกลับ: ตัดน้ำหนัก/ส่วนสูง/BMI เดิมทิ้ง (ย้ายไปเก็บตามการมารักษาแต่ละครั้งแล้ว)
+// และเพิ่มอายุที่คำนวณจากวันเกิด
 const withMetrics = patient => {
   const { weight_kg, height_cm, bmi, ...data } = patient;
   return {...data, age: metrics.age(patient.date_of_birth)};
 };
+// middleware ตรวจวันเกิด: ต้องเป็นวันที่ถูกต้องและไม่อยู่ในอนาคต
 function validateMeasurements(req, res, next) {
   try {
     if (req.body.date_of_birth && metrics.age(req.body.date_of_birth) === null) {
@@ -22,8 +27,10 @@ const router = express.Router();
 router.get('/', authenticate, async (req, res) => {
   try {
     const { search = '', page = 1, limit = 20 } = req.query;
+    // คำนวณตำแหน่งเริ่มของหน้าที่ขอ เช่น หน้า 2 ทีละ 20 รายการ -> ข้าม 20 รายการแรก
     const offset = (page - 1) * limit;
 
+    // ค้นหาแบบมีคำนี้อยู่ตรงไหนก็ได้ ในชื่อ นามสกุล HN หรือเลขบัตรประชาชน
     const searchTerm = `%${search}%`;
     const [rows] = await pool.query(
       `SELECT id, hn_code, national_id, prefix, first_name, last_name, gender,
@@ -37,6 +44,7 @@ router.get('/', authenticate, async (req, res) => {
       [searchTerm, searchTerm, searchTerm, searchTerm, Number(limit), Number(offset)]
     );
 
+    // นับจำนวนทั้งหมดที่ตรงเงื่อนไข ใช้แสดงจำนวนหน้า
     const [[{ total }]] = await pool.query(
       `SELECT COUNT(*) AS total FROM patients
        WHERE is_active = TRUE
@@ -78,15 +86,20 @@ router.post('/', authenticate, authorize('admin', 'doctor', 'nurse'), validateMe
       return res.status(400).json({ message: 'กรุณากรอกชื่อ นามสกุล และเพศให้ครบถ้วน' });
     }
 
+    // สร้างเลข HN อัตโนมัติใน transaction เพื่อไม่ให้ลงทะเบียนพร้อมกันแล้วได้เลขซ้ำ
     connection = await pool.getConnection();
     await connection.beginTransaction();
     // All registrations serialize on this row, including simultaneous first registrations.
+    // สร้างแถวเก็บลำดับเลข HN ถ้ายังไม่มี (ครั้งแรกของระบบ)
     await connection.query('INSERT IGNORE INTO patient_hn_sequence (id, last_number) VALUES (1, 0)');
+    // ล็อกแถวลำดับเลข (FOR UPDATE) คนอื่นที่ลงทะเบียนพร้อมกันต้องรอจนกว่าจะ commit
     const [[sequence]] = await connection.query('SELECT last_number FROM patient_hn_sequence WHERE id = 1 FOR UPDATE');
+    // หาเลข HN สูงสุดที่มีอยู่จริง กันกรณีมีข้อมูลเก่าที่เลขสูงกว่าลำดับที่เก็บไว้
     const [[existing]] = await connection.query(`SELECT COALESCE(MAX(CAST(SUBSTRING(hn_code, 3) AS UNSIGNED)), 0) AS highest
       FROM patients WHERE hn_code REGEXP '^HN[0-9]+$'`);
     const nextNumber = Math.max(Number(sequence.last_number), Number(existing.highest)) + 1;
     if (!Number.isSafeInteger(nextNumber)) throw new Error('HN sequence exceeds supported range');
+    // จัดรูปแบบเป็น HN0001, HN0002, ...
     const hn_code = `HN${String(nextNumber).padStart(4, '0')}`;
     await connection.query('UPDATE patient_hn_sequence SET last_number = ? WHERE id = 1', [nextNumber]);
 
@@ -126,6 +139,7 @@ router.put(
         });
       }
 
+      // รายชื่อช่องที่อนุญาตให้แก้ไข (กันการแก้ช่องอื่น เช่น hn_code หรือ is_active)
       const fields = [
         'national_id',
         'prefix',
@@ -140,6 +154,7 @@ router.put(
         'underlying_conditions'
       ];
 
+      // ช่องที่เว้นว่างได้ ถ้าส่งข้อความว่างมาจะเก็บเป็น NULL
       const nullableFields = [
         'national_id',
         'prefix',
@@ -154,6 +169,7 @@ router.put(
       const updates = [];
       const values = [];
 
+      // สร้างคำสั่ง UPDATE เฉพาะช่องที่ส่งมาจริง ช่องที่ไม่ส่งมาจะไม่ถูกแตะ
       fields.forEach((field) => {
         if (req.body[field] !== undefined) {
           let value = req.body[field];
@@ -213,4 +229,5 @@ router.put(
   }
 );
 
+// ไม่มี DELETE: ระบบตั้งใจไม่ให้ลบผู้ป่วย เพื่อคงประวัติการรักษาไว้ครบถ้วน
 module.exports = router;

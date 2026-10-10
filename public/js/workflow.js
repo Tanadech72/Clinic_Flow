@@ -1,12 +1,24 @@
+// หน้าทำงานแพทย์ (doctor.html) และพยาบาล (nurse.html) ใช้ไฟล์นี้ร่วมกัน
+// จัดการคิวทั้งหมด: บันทึกก่อนตรวจ -> ตรวจรักษาและสั่งยา (ค้นหายา + เตือนแพ้ยา) -> จ่ายยา และยกเลิกคิว
+// ต้องโหลด patient-metrics.js และ allergy-check.js ก่อนไฟล์นี้
+
 (() => {
+  // ตัวช่วยสั้น ๆ: $('x') = document.getElementById('x')
   const $ = id => document.getElementById(id);
+  // แปลงอักขระพิเศษก่อนใส่ลง HTML กันการฝังโค้ดอันตราย (XSS)
   const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const token = localStorage.getItem('token');
+  // สถานะของหน้า: ผู้ใช้, คิวทั้งหมด, รายการยา, คิวที่กำลังเปิดดู,
+  // แท็บที่เลือกอยู่ และ busy (กันกดส่งฟอร์มซ้ำ)
   let user, visits = [], medicines = [], selected, filter, busy = false;
+  // ไฟล์นี้ใช้ทั้งหน้าแพทย์และพยาบาล แยกด้วย data-workspace ใน <body>
   const doctor = document.body.dataset.workspace === 'doctor';
+  // ชื่อแท็บ/สถานะคิว
   const labels = { waiting: 'รอตรวจ', ready: 'รอจ่ายยา', completed: 'เสร็จสิ้นวันนี้', cancelled: 'ยกเลิกวันนี้' };
+  // เหตุผลยกเลิกคิวที่ใช้บ่อย (ปุ่มลัดในหน้าต่างยกเลิกคิว)
   const cancelReasons = ['ผู้ป่วยกลับก่อนตรวจ', 'ลงทะเบียนผิดหรือซ้ำ', 'ผู้ป่วยไม่รับยา', 'ส่งต่อโรงพยาบาล'];
   const name = v => `${escape(v.hn_code)} · ${escape(v.prefix || '')}${escape(v.first_name)} ${escape(v.last_name)}`;
+  // กล่องแสดงข้อมูลผู้ป่วยที่เลือกในหน้าต่าง "บันทึกก่อนตรวจ"
   const patientPanel = document.createElement('section');
   patientPanel.id = 'intakePatientDetails'; patientPanel.className = 'patient-summary';
   patientPanel.setAttribute('aria-live', 'polite');
@@ -16,11 +28,14 @@
     patientDetailSerial++; intakePatientReady = false;
     patientPanel.innerHTML = '<p class="muted">เลือกผู้ป่วยเพื่อแสดงข้อมูลให้หมอประกอบการตรวจ</p>';
   }
+  // สร้าง HTML สรุปข้อมูลผู้ป่วย: อายุ เพศ กรุ๊ปเลือด ประวัติแพ้ยา โรคประจำตัว และข้อมูลติดต่อ
   function patientSummary(p) {
     const age = PatientMetrics.age(p.date_of_birth);
     const gender = {male:'ชาย',female:'หญิง',other:'อื่น ๆ'}[p.gender] || 'ไม่ระบุ';
     return `<h3>${name(p)}</h3><div class="patient-detail-grid"><span><small>อายุ</small><strong>${age === null ? 'ไม่ระบุ' : age + ' ปี'}</strong></span><span><small>เพศ</small><strong>${gender}</strong></span><span><small>กรุ๊ปเลือด</small><strong>${escape(p.blood_type || 'ไม่ระบุ')}</strong></span><span><small>วันเกิด</small><strong>${escape(p.date_of_birth ? String(p.date_of_birth).split('T')[0] : 'ไม่ระบุ')}</strong></span></div><div class="patient-medical"><p><strong>ประวัติแพ้ยา:</strong> ${escape(p.allergies || 'ยังไม่ระบุ')}</p><p><strong>โรคประจำตัว:</strong> ${escape(p.underlying_conditions || 'ยังไม่ระบุ')}</p></div><details class="patient-contact"><summary>ข้อมูลติดต่อผู้ป่วย</summary><p>เบอร์โทร: ${escape(p.phone || 'ไม่ระบุ')}<br>ที่อยู่: ${escape(p.address || 'ไม่ระบุ')}</p></details>`;
   }
+  // โหลดข้อมูลผู้ป่วยเมื่อพยาบาลเลือกจากรายการ
+  // ใช้ serial กันผลลัพธ์เก่ามาทับ ถ้าผู้ใช้เปลี่ยนผู้ป่วยเร็ว ๆ ระหว่างรอโหลด
   async function loadPatientDetails() {
     const id = $('patient').value;
     clearPatientDetails();
@@ -36,6 +51,7 @@
       patientPanel.textContent = `${err.message} กรุณาเลือกผู้ป่วยอีกครั้ง`;
     }
   }
+  // เรียก API พร้อมแนบ token ถ้าได้ 401 (หมดอายุ/บัญชีถูกปิด) จะออกจากระบบอัตโนมัติ
   async function api(url, method = 'GET', body) {
     const res = await fetch(url, { method, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, ...(body ? {body: JSON.stringify(body)} : {}) });
     const result = await res.json();
@@ -43,16 +59,20 @@
     if (!res.ok) throw Error(result.message || 'ดำเนินการไม่สำเร็จ');
     return result;
   }
+  // แสดงหรือล้างข้อความแจ้งเตือนด้านบนของหน้า
   const notice = error => { $('notice').textContent = error ? error.message : ''; };
+  // อ่านสัญญาณชีพ (เก็บเป็น JSON) ให้เป็น object เสมอ แม้ข้อมูลเสีย
   const vitals = v => { try { return typeof v.vital_signs === 'string' ? JSON.parse(v.vital_signs) : v.vital_signs || {}; } catch { return {}; } };
   function bodyMeasurements(vs) {
     const bmi = PatientMetrics.bmi(vs.weight_kg, vs.height_cm);
     return `<div class="meta"><span>น้ำหนัก ${escape(vs.weight_kg ?? '-')} กก.</span><span>ส่วนสูง ${escape(vs.height_cm ?? '-')} ซม.</span><span>BMI ${bmi === null ? '-' : bmi.toFixed(1)}</span></div>`;
   }
+  // คำนวณ BMI ทันทีเมื่อพยาบาลกรอกน้ำหนักหรือส่วนสูง
   function updateIntakeBmi() {
     const bmi = PatientMetrics.bmi($('intake_weight_kg').value, $('intake_height_cm').value);
     $('intake_bmi').value = bmi === null ? '' : bmi.toFixed(1);
   }
+  // ข้อความแจ้งเตือนใต้รายการยา (เช่น เลือกยาซ้ำ)
   const medicineNotice = document.createElement('p');
   medicineNotice.className = 'field-help'; medicineNotice.setAttribute('role', 'status');
   medicineNotice.setAttribute('aria-live', 'polite'); $('medicineRows').after(medicineNotice);
@@ -61,8 +81,11 @@
   allergyPanel.className = 'allergy-panel'; allergyPanel.hidden = true; allergyPanel.setAttribute('role', 'alert');
   allergyPanel.innerHTML = '<h3>⚠ พบยาที่ผู้ป่วยอาจแพ้</h3><ul></ul><label for="allergyOverride">เหตุผลที่ยืนยันสั่งยานี้ *</label><textarea id="allergyOverride" rows="2" minlength="5" placeholder="เช่น ผู้ป่วยเคยใช้ยานี้ได้โดยไม่มีอาการแพ้ หรือไม่มียาทดแทน"></textarea><p class="field-help">ถ้าไม่ต้องการสั่งยานี้ ให้เปลี่ยนเป็นยาอื่นหรือกด “เอาออก” · เหตุผลจะถูกบันทึกในประวัติการรักษา</p>';
   medicineNotice.after(allergyPanel);
+  // ตรวจว่าผู้ป่วยที่กำลังตรวจอาจแพ้ยาตัวนี้หรือไม่ (ดู allergy-check.js)
   const medicineRisk = medicine => selected && AllergyCheck.check(selected.allergies, medicine, medicines);
   const riskLabel = risk => risk.level === 'direct' ? '⚠ ผู้ป่วยแพ้ยานี้' : '⚠ กลุ่มเดียวกับยาที่แพ้';
+  // ตรวจยาทุกแถวที่เลือกไว้ แล้วไฮไลต์แถวที่แพ้ (แดง = แพ้ตรงตัว, ส้ม = กลุ่มเดียวกัน)
+  // ถ้ามียาที่แพ้ จะแสดงกล่องเตือนและบังคับให้กรอกเหตุผล
   function updateAllergyWarnings() {
     const found = [];
     $('medicineRows').querySelectorAll('.medicine-row').forEach(row => {
@@ -85,13 +108,18 @@
   picker.className = 'medicine-picker';
   picker.innerHTML = '<div class="allergy-banner" role="note" hidden></div><label for="medicineSearch">ค้นหายาเพื่อเพิ่มในใบสั่งยา</label><input id="medicineSearch" type="search" autocomplete="off" placeholder="พิมพ์ชื่อยา ชื่อสามัญ รหัสยา หรือกลุ่มยา เช่น พารา, ibuprofen, NSAIDs" aria-controls="medicineResults" aria-expanded="false"><ul id="medicineResults" class="medicine-results" role="listbox" aria-label="ผลการค้นหายา" hidden></ul>';
   $('medicineRows').before(picker);
+  // รวมข้อความที่ใช้ค้นหายา: ชื่อ ชื่อสามัญ รหัส กลุ่มยา หมวดหมู่
   const searchText = m => [m.name, m.generic_name, m.code, m.drug_group, m.category].map(v => String(v || '').toLowerCase()).join(' ');
+  // id ของยาที่เลือกไว้แล้วในใบสั่งยา
   const chosenIds = () => new Set([...$('medicineRows').querySelectorAll('select')].map(select => Number(select.value)).filter(Boolean));
+  // แถบแดงบอกว่าผู้ป่วยแพ้อะไร แสดงเหนือช่องค้นหายาตลอดเวลาที่สั่งยา
   function renderAllergyBanner() {
     const banner = picker.querySelector('.allergy-banner');
     banner.hidden = !(selected && hasText(selected.allergies));
     banner.innerHTML = banner.hidden ? '' : `<span class="banner-icon" aria-hidden="true">⚠</span><div><b>ผู้ป่วยแพ้ยา: ${escape(selected.allergies)}</b><small>ระบบจะเตือนเมื่อเลือกยาที่แพ้หรือยากลุ่มเดียวกัน</small></div>`;
   }
+  // แสดงผลค้นหายา (สูงสุด 8 รายการ)
+  // เรียง: ยาที่แพ้ตรงตัวขึ้นก่อน -> ยากลุ่มเดียวกัน -> ยาอื่นตามชื่อ เพื่อให้แพทย์เห็นคำเตือนก่อน
   function renderMedicineResults() {
     const list = $('medicineResults'), query = $('medicineSearch').value.trim().toLowerCase();
     if (!query) { list.hidden = true; $('medicineSearch').setAttribute('aria-expanded', 'false'); return; }
@@ -108,6 +136,7 @@
     }).join('') : '<li class="no-result">ไม่พบยาที่ค้นหา</li>';
     list.hidden = false; $('medicineSearch').setAttribute('aria-expanded', 'true');
   }
+  // เพิ่มแถวยาใหม่ในใบสั่งยา (มีช่องเลือกยา จำนวน วิธีใช้ และข้อความเตือนแพ้ยาของแถว)
   function addMedicineRow(medicineId) {
     if ($('medicineRows').children.length >= medicines.length) return null;
     const row = document.createElement('div'); row.className = 'medicine-row';
@@ -117,6 +146,7 @@
     syncMedicineChoices(); updateAllergyWarnings();
     return row;
   }
+  // เลือกยาจากผลค้นหา: ถ้ามีอยู่แล้วจะไม่เพิ่มซ้ำ แต่พาไปช่องจำนวนของแถวเดิม
   function pickMedicine(id) {
     const existing = [...$('medicineRows').querySelectorAll('select')].find(select => Number(select.value) === id);
     const row = existing ? existing.parentElement : addMedicineRow(id);
@@ -125,6 +155,7 @@
     if (row) row.querySelector('[type=number]').focus();
   }
   $('medicineSearch').addEventListener('input', renderMedicineResults);
+  // คีย์ลัดในช่องค้นหา: Enter เลือกผลแรก, ↓ ไปที่ผลค้นหา, Esc ล้างคำค้น
   $('medicineSearch').addEventListener('keydown', event => {
     if (event.key === 'Enter') {
       event.preventDefault();
@@ -134,12 +165,14 @@
     if (event.key === 'ArrowDown') { event.preventDefault(); $('medicineResults').querySelector('[data-pick]:not(:disabled)')?.focus(); }
     if (event.key === 'Escape' && $('medicineSearch').value) { event.preventDefault(); $('medicineSearch').value = ''; renderMedicineResults(); }
   });
+  // ใช้ปุ่มลูกศรเลื่อนขึ้น-ลงในรายการผลค้นหา
   $('medicineResults').addEventListener('keydown', event => {
     const buttons = [...$('medicineResults').querySelectorAll('[data-pick]:not(:disabled)')];
     const index = buttons.indexOf(document.activeElement);
     if (event.key === 'ArrowDown') { event.preventDefault(); buttons[Math.min(index + 1, buttons.length - 1)]?.focus(); }
     if (event.key === 'ArrowUp') { event.preventDefault(); (index > 0 ? buttons[index - 1] : $('medicineSearch')).focus(); }
   });
+  // ซ่อนผลค้นหาเมื่อผู้ใช้คลิกหรือกด Tab ออกนอกส่วนค้นหายา
   picker.addEventListener('focusout', event => {
     if (!picker.contains(event.relatedTarget)) { $('medicineResults').hidden = true; $('medicineSearch').setAttribute('aria-expanded', 'false'); }
   });
@@ -150,6 +183,7 @@
   cancelDialog.setAttribute('aria-labelledby', 'cancelTitle');
   cancelDialog.innerHTML = `<h2 id="cancelTitle">ยกเลิกคิว</h2><div id="cancelPatient"></div><form id="cancelForm"><p class="cancel-hint" id="cancelHint"></p><fieldset class="reason-chips"><legend>เลือกเหตุผล</legend>${cancelReasons.map(r => `<button type="button" class="chip" data-reason="${r}">${r}</button>`).join('')}</fieldset><label for="cancelReason">เหตุผลที่ยกเลิก *</label><textarea id="cancelReason" rows="2" minlength="3" maxlength="255" required placeholder="เลือกจากด้านบน หรือพิมพ์เหตุผลเอง"></textarea><div class="actions"><button type="button" class="secondary" data-close>กลับ</button><button type="submit" class="danger">ยืนยันยกเลิกคิว</button></div></form>`;
   document.body.append(cancelDialog);
+  // ปิดตัวเลือกยาที่ถูกเลือกในแถวอื่นแล้ว (กันสั่งยาซ้ำ) และปิดปุ่มเพิ่มยาเมื่อเลือกครบทุกตัว
   function syncMedicineChoices() {
     const selects = [...$('medicineRows').querySelectorAll('select')];
     const chosen = new Set(selects.map(select => select.value).filter(Boolean));
@@ -162,6 +196,7 @@
     });
     $('addMedicine').disabled = selects.length >= medicines.length;
   }
+  // เมื่อเปลี่ยนยาในแถวใด: กันเลือกซ้ำ แล้วตรวจแพ้ยาใหม่
   $('medicineRows').addEventListener('change', event => {
     const select = event.target;
     if (select.tagName !== 'SELECT') return;
@@ -171,17 +206,23 @@
     } else { medicineNotice.textContent = ''; }
     syncMedicineChoices(); updateAllergyWarnings();
   });
+  // ข้อมูลผู้ป่วย + คำเตือนแพ้ยา + อาการ + สัญญาณชีพ ใช้ในหน้าต่างตรวจรักษาและจ่ายยา
   function info(v) {
     const vs = vitals(v);
     return `<div class="visit-info">${hasText(v.allergies) ? `<div class="flags"><span class="flag danger">⚠ แพ้ยา: ${escape(v.allergies)}</span></div>` : ''}<section class="patient-summary">${patientSummary(v)}</section><div class="symptom"><small>อาการครั้งนี้</small><p>${escape(v.symptoms || '-')}</p></div>${vitalChips(vs)}</div>`;
   }
+  // มีข้อมูลจริงหรือไม่ (ถือว่า '-', 'ไม่มี' = ไม่มีข้อมูล)
   const hasText = value => Boolean(value && !['-', '–', 'ไม่มี', 'none'].includes(String(value).trim().toLowerCase()));
+  // แสดงเวลาเป็น ชั่วโมง:นาที
   const clock = value => { const d = new Date(value); return isNaN(d) ? '' : d.toLocaleTimeString('th-TH', {hour: '2-digit', minute: '2-digit'}); };
+  // ระยะเวลาที่ผู้ป่วยรอคิว เช่น "รอ 12 นาที"
   function waited(value) {
     const minutes = Math.floor((Date.now() - new Date(value)) / 60000);
     if (!(minutes >= 0)) return '';
     return minutes < 60 ? `รอ ${minutes} นาที` : `รอ ${Math.floor(minutes / 60)} ชม. ${minutes % 60} นาที`;
   }
+  // กล่องสัญญาณชีพ 6 ช่อง ค่าที่ผิดปกติจะเป็นสีแดง:
+  // ความดันตัวบน ≥140 หรือ <90, ชีพจร >100 หรือ <50, อุณหภูมิ ≥37.5, BMI ≥30 หรือ <18.5
   function vitalChips(vs) {
     const bmi = PatientMetrics.bmi(vs.weight_kg, vs.height_cm);
     const systolic = Number(String(vs.bp || '').split('/')[0]);
@@ -195,6 +236,7 @@
     ];
     return `<div class="vital-chips">${chips.map(([label, value, unit, alert]) => `<span class="vital${alert ? ' alert-high' : ''}${hasText(value) ? '' : ' empty-value'}"><small>${label}</small><b>${hasText(value) ? escape(value) : '–'}</b>${hasText(value) && unit ? `<i>${unit}</i>` : ''}</span>`).join('')}</div>`;
   }
+  // การ์ดคิวผู้ป่วย 1 ใบ: ข้อมูลผู้ป่วย ป้ายแพ้ยา อาการ สัญญาณชีพ ผลวินิจฉัย และปุ่มตามบทบาท/สถานะ
   function visitCard(v, index) {
     const vs = vitals(v);
     const age = PatientMetrics.age(v.date_of_birth);
@@ -215,6 +257,7 @@
       <footer class="visit-actions">${cancellable ? `<button class="secondary cancel-visit" data-cancel="${v.id}">ยกเลิกคิว</button>` : ''}<button class="secondary" data-history="${v.patient_id}">ดูประวัติ</button>${action}</footer>
     </article>`;
   }
+  // ตารางรายการยา ถ้าส่งประวัติแพ้มาด้วยจะไฮไลต์แถวยาที่แพ้
   function prescriptions(items, allergies) {
     if (!items.length) return '<p class="muted">ไม่มีรายการยา</p>';
     const catalog = items.map(p => ({...p, id: p.medicine_id}));
@@ -223,7 +266,9 @@
       return `<tr class="${risk ? `allergy-hit ${risk.level}` : ''}"><td>${risk ? `<span class="rx-flag" title="${escape(risk.reason)}">⚠ แพ้</span> ` : ''}${escape(p.name || p.medicine_name)}</td><td>${escape(p.quantity)} ${escape(p.unit)}</td><td>${escape(p.dosage_instructions)}</td></tr>`;
     }).join('')}</tbody></table>`;
   }
+  // กล่องแสดงเหตุผลที่แพทย์ยืนยันสั่งยาที่ผู้ป่วยแพ้
   const overrideNote = reason => hasText(reason) ? `<p class="allergy-override-note"><b>⚠ แพทย์ยืนยันสั่งยาที่ผู้ป่วยมีประวัติแพ้</b><br>เหตุผล: ${escape(reason)}</p>` : '';
+  // วาดหน้าใหม่ทั้งหมด: ขั้นตอน 1-2-3, การ์ดสรุปจำนวนแต่ละสถานะ, ปุ่ม และรายการคิวของแท็บที่เลือก
   function render() {
     const step = ['completed', 'cancelled'].includes(filter) ? -1 : filter === 'ready' ? 2 : doctor ? 1 : 0;
     document.querySelectorAll('.flow span').forEach((span, index) => {
@@ -239,8 +284,10 @@
     if (filter === 'cancelled') rows.sort((a, b) => new Date(b.cancelled_at) - new Date(a.cancelled_at));
     $('queue').innerHTML = rows.length ? `<div class="visit-grid">${rows.map(visitCard).join('')}</div>` :`<div class="empty"><h3>${filter === 'completed' ? 'ยังไม่มีคิวที่เสร็จสิ้นวันนี้' : filter === 'cancelled' ? 'ไม่มีคิวที่ยกเลิกวันนี้' : `ไม่มีผู้ป่วย${labels[filter]}`}</h3><p>${filter === 'cancelled' ? 'คิวที่ยกเลิกด้วยปุ่ม “ยกเลิกคิว” จะแสดงที่นี่พร้อมเหตุผล' : doctor ? 'เมื่อพยาบาลบันทึกข้อมูลก่อนตรวจ คิวผู้ป่วยจะแสดงที่นี่' : filter === 'ready' ? 'เมื่อหมอตรวจเสร็จ รายการจ่ายยาจะแสดงที่นี่' : 'เลือก “บันทึกก่อนตรวจ” เพื่อส่งผู้ป่วยเข้าคิว'}</p></div>`;
   }
+  // โหลดคิวล่าสุดจากเซิร์ฟเวอร์แล้ววาดหน้าใหม่
   async function refresh() { try { visits = (await api('/api/visits')).data; render(); notice(); } catch (err) { notice(err); $('queue').innerHTML = '<div class="card empty">โหลดคิวไม่สำเร็จ กรุณาลองรีเฟรช</div>'; } }
   let searchSerial = 0;
+  // ค้นหาผู้ป่วยในหน้าต่างบันทึกก่อนตรวจ (ใช้ serial กันผลค้นหาเก่ามาทับผลใหม่)
   async function patients() {
     const serial = ++searchSerial;
     clearPatientDetails();
@@ -251,6 +298,8 @@
       $('patient').innerHTML = '<option value="">เลือกผู้ป่วย</option>' + result.data.map(p => `<option value="${p.id}">${name(p)}</option>`).join('');
     } catch (err) { notice(err); }
   }
+  // จัดการการคลิกปุ่มทั้งหน้าในที่เดียว (event delegation)
+  // เพราะการ์ดและปุ่มถูกสร้างใหม่ทุกครั้งที่ render จึงผูก event ไว้ที่ document แทน
   document.addEventListener('click', async event => {
     const button = event.target.closest('button');
     if (!button) return;
@@ -258,6 +307,7 @@
     if (button.dataset.filter) { filter = button.dataset.filter; render(); }
     if (button.id === 'refresh') await refresh();
     if (button.id === 'newIntake') { filter = 'waiting'; render(); $('intakeForm').reset(); $('intakeDialog').showModal(); await patients(); }
+    // แพทย์กด "ตรวจรักษา": โหลดรายการยาล่าสุด แล้วเปิดหน้าต่างตรวจรักษา
     if (button.dataset.treat) {
       selected = visits.find(v => v.id === Number(button.dataset.treat));
       $('treatmentForm').reset(); $('medicineRows').innerHTML = ''; medicineNotice.textContent = ''; $('treatmentPatient').innerHTML = info(selected);
@@ -266,6 +316,7 @@
     if (button.id === 'addMedicine') addMedicineRow();
     if (button.dataset.pick) pickMedicine(Number(button.dataset.pick));
     if (button.hasAttribute('data-remove')) { button.parentElement.remove(); medicineNotice.textContent = ''; syncMedicineChoices(); updateAllergyWarnings(); }
+    // กด "ยกเลิกคิว": เปิดหน้าต่างยืนยันพร้อมคำอธิบายตามสถานะคิว
     if (button.dataset.cancel) {
       selected = visits.find(v => v.id === Number(button.dataset.cancel));
       $('cancelForm').reset();
@@ -276,16 +327,19 @@
         : 'ผู้ป่วยจะถูกนำออกจากคิวรอตรวจ และส่งเข้าคิวใหม่ได้ภายหลัง';
       cancelDialog.showModal();
     }
+    // กดปุ่มเหตุผลลัด: ใส่ข้อความลงช่องเหตุผล
     if (button.dataset.reason) {
       $('cancelReason').value = button.dataset.reason;
       cancelDialog.querySelectorAll('.chip').forEach(chip => chip.classList.toggle('active', chip === button));
     }
+    // พยาบาลกด "จ่ายยา": แสดงรายการยาให้ตรวจสอบก่อนยืนยัน
     if (button.dataset.dispense) {
       selected = visits.find(v => v.id === Number(button.dataset.dispense)); $('dispenseForm').reset();
       $('dispenseDetails').innerHTML = `${info(selected)}<p>การวินิจฉัย: ${escape(selected.diagnosis)}<br>คำสั่งแพทย์: ${escape(selected.treatment_notes || '-')}</p>${overrideNote(selected.allergy_override)}${prescriptions(selected.prescriptions, selected.allergies)}`;
       $('dispenseSubmit').textContent = selected.prescriptions.length ? 'ยืนยันจ่ายยาและตัดสต๊อก' : 'ยืนยันปิดคิว';
       $('dispenseDialog').showModal();
     }
+    // กด "ดูประวัติ": โหลดประวัติการรักษาทั้งหมดของผู้ป่วย
     if (button.dataset.history) {
       $('historyDetails').textContent = 'กำลังโหลด…'; $('historyDialog').showModal();
       try {
@@ -298,6 +352,8 @@
   $('patient').addEventListener('change', loadPatientDetails);
   ['intake_weight_kg', 'intake_height_cm'].forEach(id => $(id).addEventListener('input', updateIntakeBmi));
   $('intakeForm').addEventListener('reset', () => { $('intake_bmi').value = ''; clearPatientDetails(); });
+  // ส่งฟอร์มทุกแบบผ่านฟังก์ชันนี้: ตรวจข้อมูลเบื้องต้น กันกดซ้ำ (busy)
+  // เรียก API แล้วปิดหน้าต่างและโหลดคิวใหม่ ถ้าผิดพลาดแสดงข้อความ
   async function submit(event, action) {
     event.preventDefault(); if (busy) return;
     if (event.target.id === 'intakeForm' && !intakePatientReady) { alert('กรุณาเลือกผู้ป่วยและรอให้ข้อมูลแสดงครบก่อนส่งเข้าคิว'); return; }
@@ -311,12 +367,15 @@
     catch (err) { alert(err.message); }
     finally { busy = false; button.disabled = false; }
   }
+  // ผูกฟอร์มแต่ละแบบกับ API: บันทึกก่อนตรวจ, ตรวจรักษา, จ่ายยา, ยกเลิกคิว
   $('intakeForm').addEventListener('submit', e => submit(e, () => api('/api/visits', 'POST', {patient_id: Number($('patient').value), symptoms: $('symptoms').value, vital_signs: {bp: $('bp').value, pulse: $('pulse').value, temp: $('temp').value, weight_kg: $('intake_weight_kg').value === '' ? null : Number($('intake_weight_kg').value), height_cm: $('intake_height_cm').value === '' ? null : Number($('intake_height_cm').value)}})));
   $('treatmentForm').addEventListener('submit', e => submit(e, () => api(`/api/visits/${selected.id}/treatment`, 'POST', {diagnosis: $('diagnosis').value, treatment_notes: $('notes').value, medicines: [...document.querySelectorAll('.medicine-row')].map(row => ({medicine_id: Number(row.querySelector('select').value), quantity: Number(row.querySelector('[type=number]').value), dosage_instructions: row.querySelector('input:not([type=number])').value})), ...(allergyPanel.hidden ? {} : {allergy_override: $('allergyOverride').value})})));
   $('dispenseForm').addEventListener('submit', e => submit(e, () => api(`/api/visits/${selected.id}/dispense`, 'POST', {})));
   $('cancelForm').addEventListener('submit', e => submit(e, () => api(`/api/visits/${selected.id}/cancel`, 'POST', {reason: $('cancelReason').value})));
   $('logout').onclick = () => { localStorage.clear(); location.href = '/'; };
   (async () => {
+    // เริ่มต้นเมื่อเปิดหน้า: ตรวจการเข้าสู่ระบบและบทบาท
+    // ถ้าบทบาทไม่ตรงกับหน้า (เช่น พยาบาลเปิดหน้าแพทย์) จะส่งไปหน้าที่ถูกต้อง แล้วสร้างเมนูและโหลดคิว
     if (!token) { location.replace('/'); return; }
     try {
       user = (await api('/api/auth/me')).user;

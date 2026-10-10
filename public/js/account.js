@@ -1,8 +1,11 @@
+// หน้าบัญชีของฉัน (account.html) ใช้ได้ทุกบทบาท: ดูข้อมูลบัญชี และเปลี่ยนรหัสผ่านของตัวเอง
+
 (() => {
   const token = localStorage.getItem('token');
   const $ = id => document.getElementById(id);
   const roleLabels = {admin: 'เจ้าของคลินิก', doctor: 'แพทย์', nurse: 'พยาบาล'};
   const message = $('message');
+  // แสดงข้อความผลลัพธ์ใต้ฟอร์ม (สีเขียวเมื่อสำเร็จ สีแดงเมื่อผิดพลาด)
   const show = (state, text) => { message.dataset.state = state; message.textContent = text; };
 
   async function api(url, method = 'GET', body) {
@@ -13,11 +16,13 @@
     return data;
   }
 
+  // ออกจากระบบ: ลบ token ในเบราว์เซอร์แล้วกลับหน้า login
   $('logout').onclick = () => { localStorage.clear(); location.href = '/'; };
 
   (async () => {
     if (!token) { location.replace('/'); return; }
     try {
+      // โหลดข้อมูลบัญชีปัจจุบัน แล้วสร้างเมนูตามบทบาท
       const {user} = await api('/api/auth/me');
       const nurse = user.role === 'nurse', home = nurse ? '/nurse.html' : '/doctor.html';
       $('profileName').textContent = user.full_name || '-';
@@ -28,6 +33,7 @@
     } catch (err) { show('error', err.message); }
   })();
 
+  // เปลี่ยนรหัสผ่าน: ตรวจว่ารหัสใหม่กับช่องยืนยันตรงกันก่อนส่ง
   $('passwordForm').addEventListener('submit', async event => {
     event.preventDefault();
     if ($('newPassword').value !== $('confirmPassword').value) { show('error', 'รหัสผ่านใหม่และการยืนยันไม่ตรงกัน'); return; }

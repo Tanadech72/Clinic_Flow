@@ -1,3 +1,7 @@
+// สคริปต์ตรวจหน้าเว็บอัตโนมัติด้วย Chrome แบบไม่มีหน้าต่าง และถ่ายภาพหน้าจอเก็บไว้ที่ artifacts/ui/
+// ต้องเปิดเซิร์ฟเวอร์ไว้ที่ http://localhost:3000 ก่อน
+// วิธีใช้: node scripts/preview-ui.js
+
 const {spawn} = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -5,14 +9,17 @@ const path = require('node:path');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+// เปิด Chrome แบบไม่มีหน้าต่าง (headless) ด้วยโปรไฟล์ชั่วคราว แล้วควบคุมผ่าน DevTools Protocol
 const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'clinic-ui-preview-'));
 const chrome = spawn('C:/Program Files/Google/Chrome/Application/chrome.exe', ['--headless', '--disable-gpu', '--no-first-run', '--remote-debugging-port=9333', `--user-data-dir=${profile}`, 'about:blank'], {windowsHide:true, stdio:'ignore'});
 let socket;
 const keepAlive = setInterval(() => {}, 1000);
+// ถ้าทำงานเกิน 45 วินาที ให้หยุดและถือว่าล้มเหลว
 const deadline = setTimeout(() => { console.error('Preview timed out'); process.exitCode=1; if(socket)socket.close(); chrome.kill(); clearInterval(keepAlive); }, 45000);
 (async () => {
   try {
     let target;
+    // รอจน Chrome พร้อม แล้วเปิดแท็บใหม่
     for (let i=0;i<40;i++) {
       try { target = await (await fetch('http://127.0.0.1:9333/json/new?about:blank', {method:'PUT'})).json(); break; } catch { await delay(250); }
     }
@@ -20,26 +27,32 @@ const deadline = setTimeout(() => { console.error('Preview timed out'); process.
     socket = new WebSocket(target.webSocketDebuggerUrl);
     await new Promise((resolve,reject) => { socket.onopen=resolve; socket.onerror=reject; });
     let serial=0; const pending=new Map(); const errors=[];
+    // รับข้อความจาก Chrome: เก็บ error ของ JavaScript ในหน้า และส่งผลลัพธ์คืนให้คำสั่งที่รออยู่
     socket.onmessage = event => {
       const message=JSON.parse(event.data);
       if (message.method==='Runtime.exceptionThrown') errors.push(message.params.exceptionDetails.text);
       if (message.id) { const callbacks=pending.get(message.id); if(!callbacks)return; pending.delete(message.id); message.error ? callbacks.reject(Error(message.error.message)) : callbacks.resolve(message.result); }
     };
+    // ส่งคำสั่งไปที่ Chrome แล้วรอผล
     const send=(method,params={}) => new Promise((resolve,reject)=>{const id=++serial;pending.set(id,{resolve,reject});socket.send(JSON.stringify({id,method,params}));});
     await send('Page.enable'); await send('Runtime.enable');
     fs.mkdirSync('artifacts/ui',{recursive:true});
     const results=[];
+    // วนเปิดแต่ละหน้า ตามบทบาท และความกว้างจอ (1440 = คอม, 390 = มือถือ)
     for (const [page,role,width] of [['users','admin',1440],['dashboard','admin',1440],['doctor','admin',1440],['nurse','nurse',1440],['users','admin',390],['nurse','nurse',390],['patients','nurse',1440],['patients','nurse',390],['inventory','nurse',390]]) {
       await send('Emulation.setDeviceMetricsOverride',{width,height:1000,deviceScaleFactor:1,mobile:width<500});
       await send('Page.navigate',{url:'http://localhost:3000/'}); await delay(400);
       const user={id:role==='nurse'?2:1,role,username:role,full_name:role==='nurse'?'พยาบาล':'เจ้าของคลินิก'};
+      // สร้าง token ให้ล็อกอินอัตโนมัติ (ต้องมีบัญชี id 1 = admin และ id 2 = พยาบาล ในฐานข้อมูล)
       const token=jwt.sign(user,process.env.JWT_SECRET,{expiresIn:'10m'});
       await send('Runtime.evaluate',{expression:`localStorage.setItem('token',${JSON.stringify(token)});localStorage.setItem('user',${JSON.stringify(JSON.stringify(user))})`});
       await send('Page.navigate',{url:`http://localhost:3000/${page}.html`}); await delay(900);
+      // เก็บความกว้างหน้า เพื่อตรวจว่าไม่มีส่วนไหนล้นจอจนต้องเลื่อนแนวนอน
       const layout=await send('Runtime.evaluate',{expression:`JSON.stringify({page:location.pathname,width:innerWidth,scroll:document.documentElement.scrollWidth,heading:document.querySelector('h1')?.textContent,formVisible:document.getElementById('userForm') ? !document.getElementById('userForm').hidden : true})`,returnByValue:true});
       const value=JSON.parse(layout.result.value); results.push(value);
       const shot=await send('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});
       fs.writeFileSync(`artifacts/ui/${page}-${width}.png`,Buffer.from(shot.data,'base64'));
+      // หน้าแพทย์: จำลองคิวแล้วทดสอบว่าเลือกยาซ้ำไม่ได้ และตัวเลือกกลับมาเมื่อเปลี่ยน/ลบแถว
       if (page === 'doctor') {
         await send('Runtime.evaluate',{expression:`window.originalFetch=window.fetch;window.fetch=(url,options)=>url==='/api/visits'?Promise.resolve(new Response(JSON.stringify({data:[{id:999,patient_id:999,hn_code:'PREVIEW',first_name:'ตัวอย่าง',last_name:'ทดสอบ',status:'waiting',symptoms:'ทดสอบหน้าจอ',vital_signs:{},prescriptions:[]}]}),{status:200,headers:{'Content-Type':'application/json'}})):window.originalFetch(url,options);document.getElementById('refresh').click();`}); await delay(250);
         await send('Runtime.evaluate',{expression:`document.querySelector('[data-treat]').click()`}); await delay(400);
@@ -64,6 +77,7 @@ const deadline = setTimeout(() => { console.error('Preview timed out'); process.
         if(!duplicateCheck.result.value)throw Error('Medicine duplicate selection, change or removal failed');
         console.log('PASS duplicate medicine choices disabled, rejected, and restored on change/removal');
       }
+      // หน้าผู้ป่วย: API ต้องส่งอายุ ไม่มีช่องน้ำหนัก/ส่วนสูงในฟอร์ม และ HN สร้างอัตโนมัติ
       if (page === 'patients') {
         const response = await send('Runtime.evaluate', {expression:`(async()=>{const response=await fetch('/api/patients',{headers:{Authorization:'Bearer '+localStorage.getItem('token')}});const result=await response.json();return JSON.stringify({status:response.status,metricsAvailable:result.data.every(p=>'age' in p && !['bmi','weight_kg','height_cm'].some(key=>key in p))})})()`,awaitPromise:true,returnByValue:true});
         const check=JSON.parse(response.result.value);
@@ -76,6 +90,7 @@ const deadline = setTimeout(() => { console.error('Preview timed out'); process.
         fs.writeFileSync(`artifacts/ui/patient-form-${width}.png`,Buffer.from(modalShot.data,'base64'));
         console.log(`PASS patient age retained and intake fields removed at ${width}px`);
       }
+      // หน้าพยาบาล: ขั้นตอน 1-2-3 ไฮไลต์ถูก, เลือกผู้ป่วยแล้วข้อมูลขึ้นครบ, BMI คำนวณถูก และล้างค่าเมื่อเปิดใหม่
       if (page === 'nurse') {
         const initialStep=await send('Runtime.evaluate',{expression:`document.querySelector('.flow .current')?.textContent`,returnByValue:true});
         if(!initialStep.result.value?.startsWith('1')) throw Error('Nurse workspace must start at intake step 1');
@@ -103,6 +118,7 @@ const deadline = setTimeout(() => { console.error('Preview timed out'); process.
         console.log(`PASS patient details, per-visit intake BMI and reset at ${width}px`);
       }
     }
+    // สรุปผล: ถ้ามี error ในหน้าเว็บ หรือหน้าใดกว้างเกินจอ ให้ถือว่าล้มเหลว
     console.log(JSON.stringify({results,errors},null,2));
     if(errors.length || results.some(r=>r.scroll>r.width || !r.formVisible)) process.exitCode=1;
     await send('Browser.close');

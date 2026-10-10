@@ -1,3 +1,6 @@
+// API ประวัติการรักษา (/api/records): ดูอย่างเดียว
+// การบันทึกการรักษาใหม่ทำผ่าน /api/visits/:id/treatment ในระบบคิว
+
 const express = require('express');
 const pool = require('../config/db');
 const { authenticate, authorize } = require('../middleware/auth');
@@ -7,6 +10,7 @@ const router = express.Router();
 // GET /api/records/patient/:patientId - ดูประวัติการรักษาทั้งหมดของผู้ป่วยรายหนึ่ง
 router.get('/patient/:patientId', authenticate, async (req, res) => {
   try {
+    // ดึงประวัติการรักษาทั้งหมดของผู้ป่วยรายนี้ พร้อมชื่อแพทย์ผู้ตรวจ เรียงจากล่าสุด
     const [records] = await pool.query(
       `SELECT mr.*, u.full_name AS doctor_name
        FROM medical_records mr
@@ -17,6 +21,7 @@ router.get('/patient/:patientId', authenticate, async (req, res) => {
     );
 
     // ดึงรายการยาที่จ่ายในแต่ละครั้ง
+    // ดึงรายการยาที่สั่งในการรักษาแต่ละครั้งมาแนบไว้
     for (const record of records) {
       const [meds] = await pool.query(
         `SELECT p.quantity, p.dosage_instructions, m.name AS medicine_name, m.unit

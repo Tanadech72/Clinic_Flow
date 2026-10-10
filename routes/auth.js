@@ -1,3 +1,5 @@
+// API บัญชีผู้ใช้ (/api/auth): เข้าสู่ระบบ, จัดการบัญชี (เฉพาะเจ้าของคลินิก) และเปลี่ยนรหัสผ่านตัวเอง
+
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -17,6 +19,7 @@ router.post('/login', async (req, res) => {
     }
 
     const [rows] = await pool.query(
+      // หาเฉพาะบัญชีที่ยังเปิดใช้งาน บัญชีที่ถูกปิดจะเข้าสู่ระบบไม่ได้
       'SELECT * FROM users WHERE username = ? AND is_active = TRUE',
       [username]
     );
@@ -26,12 +29,15 @@ router.post('/login', async (req, res) => {
     }
 
     const user = rows[0];
+    // เทียบรหัสผ่านที่กรอกกับรหัสที่เข้ารหัสไว้ (ไม่ได้ถอดรหัส แต่เข้ารหัสแล้วเทียบ)
     const isMatch = await bcrypt.compare(password, user.password_hash);
 
     if (!isMatch) {
       return res.status(401).json({ message: 'username หรือ password ไม่ถูกต้อง' });
     }
 
+    // สร้าง token สำหรับเรียก API ครั้งต่อไป อายุตาม JWT_EXPIRES_IN (ค่าเริ่มต้น 8 ชั่วโมง)
+    // หน้าเว็บเก็บ token ไว้ใน localStorage แล้วแนบมาใน header Authorization ทุกครั้ง
     const token = jwt.sign(
       { id: user.id, username: user.username, role: user.role, full_name: user.full_name },
       process.env.JWT_SECRET,
@@ -55,9 +61,11 @@ router.post('/login', async (req, res) => {
 const MIN_PASSWORD_LENGTH = 6;
 const STAFF_ROLES = ['doctor', 'nurse'];
 const validId = value => Number.isSafeInteger(Number(value)) && Number(value) > 0;
+// คืนข้อความ error ถ้ารหัสผ่านสั้นเกินไป หรือ null ถ้าผ่าน
 const passwordError = password => (typeof password !== 'string' || password.length < MIN_PASSWORD_LENGTH)
   ? `รหัสผ่านต้องมีอย่างน้อย ${MIN_PASSWORD_LENGTH} ตัวอักษร` : null;
 
+// ดึงข้อมูลบัญชีจาก id (ไม่รวมรหัสผ่าน)
 async function findUser(id) {
   const [rows] = await pool.query('SELECT id, username, full_name, role, is_active FROM users WHERE id = ?', [id]);
   return rows[0];
@@ -119,6 +127,7 @@ router.put('/users/:id', authenticate, authorize('admin'), async (req, res) => {
     const role = req.body.role || target.role;
     if (!full_name) return res.status(400).json({ message: 'กรุณากรอกชื่อแสดงผล' });
     if (role !== target.role) {
+      // กฎป้องกัน: ห้ามเปลี่ยนบทบาทตัวเอง และห้ามเปลี่ยนบทบาทเจ้าของคลินิก กันไม่ให้ไม่มีใครดูแลระบบ
       if (target.id === req.user.id) return res.status(400).json({ message: 'ไม่สามารถเปลี่ยนบทบาทของบัญชีตัวเองได้' });
       if (target.role === 'admin') return res.status(400).json({ message: 'ไม่สามารถเปลี่ยนบทบาทของบัญชีเจ้าของคลินิกได้' });
       if (!STAFF_ROLES.includes(role)) return res.status(400).json({ message: 'กรุณาเลือกบทบาทแพทย์หรือพยาบาล' });
@@ -138,6 +147,7 @@ router.patch('/users/:id/status', authenticate, authorize('admin'), async (req, 
     if (typeof req.body.is_active !== 'boolean') return res.status(400).json({ message: 'กรุณาระบุสถานะบัญชี' });
     const target = await findUser(req.params.id);
     if (!target) return res.status(404).json({ message: 'ไม่พบบัญชีผู้ใช้' });
+    // กฎป้องกัน: ห้ามปิดบัญชีตัวเองและบัญชีเจ้าของคลินิก
     if (target.id === req.user.id) return res.status(400).json({ message: 'ไม่สามารถปิดการใช้งานบัญชีตัวเองได้' });
     if (target.role === 'admin') return res.status(400).json({ message: 'ไม่สามารถปิดการใช้งานบัญชีเจ้าของคลินิกได้' });
 
@@ -178,6 +188,7 @@ router.put('/me/password', authenticate, async (req, res) => {
     const invalidPassword = passwordError(new_password);
     if (invalidPassword) return res.status(400).json({ message: invalidPassword });
 
+    // ต้องยืนยันรหัสผ่านปัจจุบันก่อน กันคนอื่นที่แอบใช้เครื่องที่ล็อกอินค้างไว้เปลี่ยนรหัสผ่าน
     const [rows] = await pool.query('SELECT password_hash FROM users WHERE id = ?', [req.user.id]);
     if (!rows.length || !(await bcrypt.compare(current_password, rows[0].password_hash))) {
       return res.status(400).json({ message: 'รหัสผ่านปัจจุบันไม่ถูกต้อง' });

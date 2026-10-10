@@ -1,6 +1,11 @@
+// สคริปต์อัปเกรดฐานข้อมูลเดิมให้รองรับฟีเจอร์ใหม่ โดยไม่ลบข้อมูลเดิม
+// วิธีใช้: npm run migrate (รันซ้ำได้ ส่วนที่ทำไปแล้วจะถูกข้าม)
+// ฐานข้อมูลใหม่ไม่ต้องรัน ใช้ schema.sql ได้เลย
+
 const fs = require('fs');
 const path = require('path');
 const pool = require('./config/db');
+// ใช้เติมชื่อสามัญ/กลุ่มยาให้ยาเดิมที่ยังไม่มีข้อมูล
 const catalog = require('./data/starter-medicines.json');
 
 // เพิ่มคอลัมน์เฉพาะเมื่อยังไม่มี (MySQL ไม่รองรับ ADD COLUMN IF NOT EXISTS)
@@ -14,6 +19,7 @@ async function addColumnIfMissing(table, column, definition) {
 
 (async () => {
   try {
+    // สร้างตารางคิว (clinic_visits) และตารางลำดับเลข HN ถ้ายังไม่มี
     await pool.query(fs.readFileSync(path.join(__dirname, 'migrations/workflow.sql'), 'utf8'));
     await pool.query(fs.readFileSync(path.join(__dirname, 'migrations/patient-hn.sql'), 'utf8'));
 
@@ -27,6 +33,7 @@ async function addColumnIfMissing(table, column, definition) {
     await addColumnIfMissing('clinic_visits', 'cancelled_at', 'DATETIME AFTER cancelled_by');
     await addColumnIfMissing('clinic_visits', 'cancel_reason', "VARCHAR(255) COMMENT 'เหตุผลที่ยกเลิกคิว' AFTER cancelled_at");
     let filled = 0;
+    // เติมชื่อสามัญและกลุ่มยาให้ยาเดิม จับคู่ด้วยรหัสยาหรือชื่อยา (ไม่ทับข้อมูลที่กรอกไว้แล้ว)
     for (const item of catalog) {
       const [result] = await pool.query(
         `UPDATE medicines SET generic_name = ?, drug_group = ?

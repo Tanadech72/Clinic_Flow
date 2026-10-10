@@ -1,3 +1,6 @@
+// API คลังยา (/api/medicines): ดู/ค้นหายา เพิ่ม แก้ไข รับยาเข้าสต๊อก และดูประวัติการเคลื่อนไหว
+// การตัดสต๊อกเกิดตอนพยาบาลยืนยันจ่ายยาเท่านั้น (routes/visits.js)
+
 const express = require('express');
 const pool = require('../config/db');
 const { authenticate, authorize } = require('../middleware/auth');
@@ -10,9 +13,11 @@ router.get('/', authenticate, async (req, res) => {
     const { search = '', lowStockOnly } = req.query;
     const searchTerm = `%${search}%`;
 
+    // ค้นหาได้ทั้งชื่อยา รหัสยา และชื่อสามัญภาษาอังกฤษ
     let query = `SELECT * FROM medicines WHERE is_active = TRUE AND (name LIKE ? OR code LIKE ? OR generic_name LIKE ?)`;
     const params = [searchTerm, searchTerm, searchTerm];
 
+    // ถ้าติ๊ก "แสดงเฉพาะยาใกล้หมด" จะกรองเฉพาะยาที่คงเหลือไม่เกินจุดสั่งซื้อ
     if (lowStockOnly === 'true') {
       query += ' AND stock_quantity <= reorder_level';
     }
@@ -29,6 +34,7 @@ router.get('/', authenticate, async (req, res) => {
 // POST /api/medicines - เพิ่มยาใหม่
 router.post('/', authenticate, authorize('admin', 'doctor', 'nurse'), async (req, res) => {
   try {
+    // generic_name และ drug_group ใช้ตรวจประวัติแพ้ยาตอนแพทย์สั่งยา (ดู public/js/allergy-check.js)
     const { code, name, generic_name, drug_group, category, unit, price_per_unit, stock_quantity, reorder_level, expiry_date } = req.body;
 
     if (!code || !name || !unit) {
@@ -53,10 +59,13 @@ router.post('/', authenticate, authorize('admin', 'doctor', 'nurse'), async (req
 // PUT /api/medicines/:id - แก้ไขข้อมูลยา
 router.put('/:id', authenticate, authorize('admin', 'doctor', 'nurse'), async (req, res) => {
   try {
+    // ช่องที่อนุญาตให้แก้ไข (ไม่รวมรหัสยาและจำนวนสต๊อก)
+    // การเปลี่ยนจำนวนสต๊อกต้องทำผ่านการรับยาเข้า เพื่อให้มีประวัติการเคลื่อนไหวเสมอ
     const fields = ['name', 'generic_name', 'drug_group', 'category', 'unit', 'price_per_unit', 'reorder_level', 'expiry_date'];
     const updates = [];
     const values = [];
 
+    // สร้างคำสั่ง UPDATE เฉพาะช่องที่ส่งมา
     fields.forEach((field) => {
       if (req.body[field] !== undefined) {
         updates.push(`${field} = ?`);
@@ -93,6 +102,7 @@ router.post('/:id/stock-in', authenticate, authorize('admin', 'doctor', 'nurse')
       return res.status(400).json({ message: 'กรุณาระบุจำนวนที่ถูกต้อง' });
     }
 
+    // เพิ่มจำนวนสต๊อกและบันทึกประวัติการรับเข้าใน transaction เดียว ต้องสำเร็จทั้งคู่หรือไม่ทำเลย
     await connection.beginTransaction();
 
     const [result] = await connection.query(
@@ -106,6 +116,7 @@ router.post('/:id/stock-in', authenticate, authorize('admin', 'doctor', 'nurse')
     }
 
     await connection.query(
+      // บันทึกประวัติ: รับเข้า (in) จำนวนเท่าไร เหตุผล และใครเป็นผู้ทำ
       `INSERT INTO stock_transactions (medicine_id, change_type, quantity, reason, created_by)
        VALUES (?, 'in', ?, ?, ?)`,
       [req.params.id, quantity, reason || 'รับสินค้าใหม่', req.user.id]

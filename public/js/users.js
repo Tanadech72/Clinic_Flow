@@ -1,11 +1,18 @@
+// หน้าบัญชีผู้ใช้งาน (users.html) เฉพาะเจ้าของคลินิก
+// สร้างบัญชีแพทย์/พยาบาล แก้ไขชื่อและบทบาท รีเซ็ตรหัสผ่าน และปิด/เปิดบัญชี (ไม่มีการลบบัญชี)
+
 const form = document.getElementById('userForm');
 const message = document.getElementById('message');
 const accountToken = localStorage.getItem('token');
+// ชื่อบทบาทภาษาไทยที่แสดงในตาราง
 const roleLabels = {admin: 'เจ้าของคลินิก', doctor: 'แพทย์', nurse: 'พยาบาล'};
+// แปลงอักขระพิเศษก่อนใส่ลง HTML กันการฝังโค้ดอันตราย (XSS) จากข้อมูลที่ผู้ใช้กรอก
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let currentUser, users = [], selected;
+// ซ่อนฟอร์มไว้ก่อนจนกว่าจะยืนยันว่าเป็นเจ้าของคลินิก
 form.hidden = true;
 
+// เรียก API พร้อมแนบ token ถ้า token หมดอายุหรือบัญชีถูกปิด (401) จะกลับหน้า login
 async function api(url, method = 'GET', body) {
   const res = await fetch(url, {method, headers: {Authorization: `Bearer ${accountToken}`, 'Content-Type': 'application/json'}, ...(body ? {body: JSON.stringify(body)} : {})});
   const data = await res.json();
@@ -19,6 +26,8 @@ function formatDate(value) {
   return isNaN(date) ? '-' : date.toLocaleDateString('th-TH', {day: 'numeric', month: 'short', year: 'numeric'});
 }
 
+// แสดงตารางสมาชิกในทีม พร้อมปุ่มจัดการ
+// บัญชีตัวเองและบัญชีเจ้าของคลินิกจะไม่มีปุ่มปิดบัญชี (เซิร์ฟเวอร์ก็ห้ามไว้เช่นกัน)
 function renderUsers() {
   const active = users.filter(u => u.is_active).length;
   document.getElementById('userCount').textContent = `ใช้งานอยู่ ${active} · ปิดแล้ว ${users.length - active}`;
@@ -44,6 +53,7 @@ async function loadUsers() {
   catch (err) { document.getElementById('userRows').innerHTML = `<tr><td colspan="6">${escapeHtml(err.message)}</td></tr>`; }
 }
 
+// เปิดหน้าต่าง (dialog) พร้อมล้างข้อมูลและข้อความ error เดิม
 function openDialog(id) {
   const dialog = document.getElementById(id);
   dialog.querySelector('form').reset();
@@ -53,6 +63,7 @@ function openDialog(id) {
 }
 
 (async () => {
+  // เมื่อเปิดหน้า: ตรวจสิทธิ์ ถ้าไม่ใช่เจ้าของคลินิกส่งกลับหน้าทำงานของตัวเอง แล้วโหลดรายชื่อบัญชี
   if (!accountToken) { location.replace('/'); return; }
   try {
     currentUser = (await api('/api/auth/me')).user;
@@ -62,6 +73,7 @@ function openDialog(id) {
   } catch { form.hidden = false; form.querySelector('[type=submit]').disabled = true; message.dataset.state = 'error'; message.textContent = 'เชื่อมต่อเซิร์ฟเวอร์ไม่สำเร็จ กรุณาโหลดหน้าใหม่'; }
 })();
 
+// ฟอร์มสร้างบัญชีใหม่
 form.addEventListener('submit', async e => {
   e.preventDefault(); const button = form.querySelector('[type=submit]'); button.disabled = true; button.textContent = 'กำลังสร้างบัญชี…'; message.textContent = '';
   try {
@@ -77,6 +89,7 @@ form.addEventListener('reset', () => {
   if (toggle) { toggle.textContent = 'แสดง'; toggle.setAttribute('aria-pressed', 'false'); }
 });
 
+// จัดการปุ่มทั้งหน้าในที่เดียว: ปิดหน้าต่าง, แก้ไข, รีเซ็ตรหัสผ่าน, ปิด/เปิดบัญชี
 document.addEventListener('click', event => {
   const button = event.target.closest('button');
   if (!button) return;
@@ -113,6 +126,7 @@ document.addEventListener('click', event => {
   }
 });
 
+// ส่งข้อมูลจากหน้าต่าง ถ้าสำเร็จจะปิดหน้าต่างและโหลดตารางใหม่ ถ้าไม่สำเร็จแสดง error ในหน้าต่าง
 async function submitDialog(event, action, success) {
   event.preventDefault();
   const dialog = event.target.closest('dialog'), button = event.target.querySelector('[type=submit]');

@@ -1,3 +1,5 @@
+// API ภาพรวมคลินิก (/api/dashboard): รวมตัวเลขสรุปและรายการแจ้งเตือนไว้ในการเรียกครั้งเดียว
+
 const express = require('express');
 const pool = require('../config/db');
 const { authenticate } = require('../middleware/auth');
@@ -7,14 +9,17 @@ const router = express.Router();
 // GET /api/dashboard - สรุปข้อมูลภาพรวมของคลินิก
 router.get('/', authenticate, async (req, res) => {
   try {
+    // จำนวนผู้ป่วยทั้งหมดที่ยังใช้งานอยู่
     const [[patientCount]] = await pool.query(
       'SELECT COUNT(*) AS total FROM patients WHERE is_active = TRUE'
     );
 
+    // จำนวนการตรวจรักษาวันนี้ (นับจากประวัติการรักษาที่บันทึกวันนี้)
     const [[visitsToday]] = await pool.query(
       'SELECT COUNT(*) AS total FROM medical_records WHERE DATE(visit_date) = CURDATE()'
     );
 
+    // ยาที่คงเหลือน้อยกว่าหรือเท่ากับจุดสั่งซื้อ (10 รายการแรก เรียงจากเหลือน้อยสุด)
     const [lowStockMedicines] = await pool.query(
       `SELECT id, code, name, stock_quantity, reorder_level
        FROM medicines
@@ -23,6 +28,7 @@ router.get('/', authenticate, async (req, res) => {
        LIMIT 10`
     );
 
+    // ยาที่จะหมดอายุภายใน 90 วัน (รวมที่หมดอายุไปแล้ว)
     const [expiringSoon] = await pool.query(
       `SELECT id, code, name, expiry_date, stock_quantity
        FROM medicines
@@ -33,6 +39,7 @@ router.get('/', authenticate, async (req, res) => {
        LIMIT 10`
     );
 
+    // ประวัติการรักษาล่าสุด 10 รายการ
     const [recentVisits] = await pool.query(
       `SELECT mr.id, mr.visit_date, p.first_name, p.last_name, p.hn_code, u.full_name AS doctor_name
        FROM medical_records mr
