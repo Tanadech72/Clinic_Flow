@@ -170,6 +170,16 @@ curl http://localhost:3000/api/patients \
   -H "Authorization: Bearer <TOKEN>"
 ```
 
+## เอกสารการทดสอบ
+
+| ไฟล์ | ใช้สำหรับ |
+|---|---|
+| [docs/test-cases.md](docs/test-cases.md) | ระบบทำงานได้ครบฟังก์ชัน ≥ 90% (62 กรณีทดสอบ) |
+| [docs/postman/](docs/postman/README.md) | ทดสอบ API อัตโนมัติด้วย Postman (41 request) |
+| [docs/data-accuracy.md](docs/data-accuracy.md) | ความถูกต้องของข้อมูล ≥ 95% |
+| [docs/uat-questionnaire.md](docs/uat-questionnaire.md) | ความพึงพอใจผู้ใช้งาน ≥ 80% |
+| [docs/er-diagram.md](docs/er-diagram.md) | แผนภาพและคำอธิบายฐานข้อมูล (8 ตาราง 11 ความสัมพันธ์) |
+
 ## ขั้นตอนถัดไปที่แนะนำ
 - ออกแบบ ER Diagram ให้ตรงกับ schema.sql
 - เพิ่ม validation ที่ละเอียดขึ้น (เช่นด้วย Joi หรือ express-validator)

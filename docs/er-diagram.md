@@ -1,0 +1,163 @@
+# แผนภาพความสัมพันธ์ของข้อมูล (ER Diagram) — Clinic Flow
+
+ฐานข้อมูล MySQL ชื่อ `clinic_flow` มี 8 ตาราง และความสัมพันธ์ (foreign key) 11 เส้น
+โครงสร้างตรงกับ `schema.sql` (ฐานข้อมูลใหม่) และ `npm run migrate` (อัปเกรดฐานข้อมูลเดิม)
+
+## แผนภาพ
+
+แผนภาพนี้แสดงผลอัตโนมัติบน GitHub และใน VS Code (ติดตั้งส่วนขยาย Markdown Preview Mermaid Support แล้วกด Ctrl+Shift+V)
+ถ้าต้องการภาพสำหรับรายงาน ให้ export จาก MySQL Workbench (Database → Reverse Engineer)
+
+```mermaid
+erDiagram
+    users ||--o{ clinic_visits : "nurse_id (พยาบาลบันทึกก่อนตรวจ)"
+    users ||--o{ clinic_visits : "dispensed_by (พยาบาลจ่ายยา)"
+    users ||--o{ clinic_visits : "cancelled_by (ผู้ยกเลิกคิว)"
+    users ||--o{ medical_records : "doctor_id (แพทย์ผู้ตรวจ)"
+    users ||--o{ stock_transactions : "created_by (ผู้ทำรายการ)"
+    patients ||--o{ clinic_visits : "patient_id"
+    patients ||--o{ medical_records : "patient_id"
+    medical_records |o--o| clinic_visits : "medical_record_id"
+    medical_records ||--o{ prescriptions : "medical_record_id"
+    medicines ||--o{ prescriptions : "medicine_id"
+    medicines ||--o{ stock_transactions : "medicine_id"
+
+    users {
+        int id PK
+        varchar username UK
+        varchar password_hash "เข้ารหัสด้วย bcrypt"
+        varchar full_name
+        enum role "admin / doctor / nurse"
+        boolean is_active "ปิดบัญชีแทนการลบ"
+        datetime created_at
+        datetime updated_at
+    }
+    patients {
+        int id PK
+        varchar hn_code UK "HN0001, HN0002, ..."
+        varchar national_id UK
+        varchar prefix
+        varchar first_name
+        varchar last_name
+        enum gender
+        date date_of_birth "คำนวณอายุ"
+        varchar phone
+        text address
+        varchar blood_type
+        text allergies "ใช้ตรวจแพ้ยา"
+        text underlying_conditions
+        boolean is_active
+        datetime created_at
+        datetime updated_at
+    }
+    patient_hn_sequence {
+        tinyint id PK
+        bigint last_number "เลข HN ล่าสุด"
+    }
+    clinic_visits {
+        int id PK
+        int patient_id FK
+        int nurse_id FK
+        text symptoms
+        json vital_signs "BP ชีพจร อุณหภูมิ น้ำหนัก ส่วนสูง BMI"
+        enum status "waiting / ready / completed / cancelled"
+        int medical_record_id FK, UK
+        int dispensed_by FK
+        datetime dispensed_at
+        int cancelled_by FK
+        datetime cancelled_at
+        varchar cancel_reason
+        decimal medicine_total "ค่ายารวม ณ เวลาจ่าย"
+        datetime created_at
+    }
+    medical_records {
+        int id PK
+        int patient_id FK
+        int doctor_id FK
+        datetime visit_date
+        text symptoms
+        text diagnosis
+        text treatment_notes
+        json vital_signs
+        text allergy_override "เหตุผลยืนยันสั่งยาที่แพ้"
+        datetime created_at
+    }
+    prescriptions {
+        int id PK
+        int medical_record_id FK
+        int medicine_id FK
+        int quantity
+        varchar dosage_instructions
+        decimal unit_price "ราคา ณ เวลาจ่าย"
+    }
+    medicines {
+        int id PK
+        varchar code UK
+        varchar name
+        varchar generic_name "ชื่อสามัญ ใช้ตรวจแพ้ยา"
+        varchar drug_group "กลุ่มยา ใช้เตือนแพ้ข้ามกลุ่ม"
+        varchar category
+        varchar unit
+        decimal price_per_unit
+        int stock_quantity
+        int reorder_level
+        date expiry_date
+        boolean is_active
+        datetime created_at
+        datetime updated_at
+    }
+    stock_transactions {
+        int id PK
+        int medicine_id FK
+        enum change_type "in / out / adjustment"
+        int quantity "บวก = รับเข้า, ลบ = จ่ายออก"
+        varchar reason
+        int reference_id "เลขรายการใบสั่งยา"
+        int created_by FK
+        datetime created_at
+    }
+```
+
+## ความสัมพันธ์ (11 เส้น)
+
+| ตาราง (ฝั่ง "หลาย") | คอลัมน์ | อ้างอิงตาราง (ฝั่ง "หนึ่ง") | ความหมาย |
+|---|---|---|---|
+| clinic_visits | patient_id | patients | ผู้ป่วย 1 คน มาเข้าคิวได้หลายครั้ง |
+| clinic_visits | nurse_id | users | พยาบาลที่บันทึกข้อมูลก่อนตรวจ |
+| clinic_visits | medical_record_id | medical_records | ผลการตรวจของคิวนี้ (1 ต่อ 1, เป็น UNIQUE) |
+| clinic_visits | dispensed_by | users | พยาบาลที่ยืนยันจ่ายยา |
+| clinic_visits | cancelled_by | users | ผู้ยกเลิกคิว |
+| medical_records | patient_id | patients | ผู้ป่วย 1 คน มีประวัติการรักษาได้หลายครั้ง |
+| medical_records | doctor_id | users | แพทย์ผู้ตรวจ |
+| prescriptions | medical_record_id | medical_records | การรักษา 1 ครั้ง สั่งยาได้หลายรายการ |
+| prescriptions | medicine_id | medicines | ยาที่สั่ง |
+| stock_transactions | medicine_id | medicines | ประวัติการเคลื่อนไหวสต๊อกของยาแต่ละตัว |
+| stock_transactions | created_by | users | ผู้ทำรายการรับเข้า / จ่ายออก |
+
+`patient_hn_sequence` เป็นตารางเดี่ยว ไม่มีความสัมพันธ์กับตารางอื่น ใช้เก็บเลข HN ล่าสุดเพื่อสร้างเลขใหม่ไม่ให้ซ้ำ
+
+## หน้าที่ของแต่ละตาราง
+
+| ตาราง | เก็บข้อมูล |
+|---|---|
+| users | บัญชีผู้ใช้งาน บทบาท และสถานะเปิด/ปิดบัญชี |
+| patients | ข้อมูลส่วนตัวและข้อมูลทางการแพทย์ของผู้ป่วย |
+| patient_hn_sequence | ลำดับเลข HN ล่าสุด (มี 1 แถว) |
+| clinic_visits | คิวการมารับบริการแต่ละครั้ง ตั้งแต่บันทึกก่อนตรวจจนจ่ายยาหรือยกเลิก |
+| medical_records | ประวัติการรักษา: อาการ การวินิจฉัย คำสั่งแพทย์ |
+| prescriptions | รายการยาที่สั่งในการรักษาแต่ละครั้ง |
+| medicines | ข้อมูลยา ราคา และจำนวนคงเหลือ |
+| stock_transactions | ประวัติการรับยาเข้าและจ่ายยาออกทุกครั้ง |
+
+## หลักการออกแบบที่ควรกล่าวถึงในรายงาน
+
+- **ไม่ลบข้อมูลสำคัญ:** ผู้ป่วย ผู้ใช้ และยาใช้คอลัมน์ `is_active` แทนการลบ เพื่อคงความสัมพันธ์กับประวัติการรักษาและประวัติสต๊อก
+- **เก็บค่า ณ เวลาที่เกิดเหตุการณ์:** `prescriptions.unit_price` และ `clinic_visits.medicine_total` เก็บราคาตอนจ่ายยา แม้ภายหลังเปลี่ยนราคา ประวัติเดิมก็ไม่เปลี่ยน ส่วนสัญญาณชีพเก็บใน `vital_signs` ของการมาแต่ละครั้ง
+- **ตรวจสอบย้อนหลังได้:** ทุกขั้นตอนบันทึกผู้ทำรายการ (nurse_id, doctor_id, dispensed_by, cancelled_by, created_by)
+- **สต๊อกสอดคล้องกับประวัติ:** การจ่ายยาทุกครั้งสร้างแถวใน `stock_transactions` ภายใน transaction เดียวกับการลดจำนวนใน `medicines`
+
+## หมายเหตุ
+
+- **คอลัมน์ที่เลิกใช้:** ฐานข้อมูลที่อัปเกรดมาจากเวอร์ชันแรกอาจมี `patients.weight_kg` และ `patients.height_cm` คอลัมน์เหล่านี้คงไว้เพื่อไม่ให้ข้อมูลเดิมหาย ระบบปัจจุบันไม่ได้ใช้ และไม่มีใน `schema.sql` แล้ว
+- **บทบาทที่ยังไม่ได้ใช้:** `users.role` รองรับค่า `pharmacist` และ `staff` เผื่อขยายระบบในอนาคต ปัจจุบันระบบใช้เพียง `admin` (เจ้าของคลินิก), `doctor` และ `nurse`
+- **change_type = adjustment** รองรับการปรับยอดสต๊อกในอนาคต ปัจจุบันระบบใช้ `in` และ `out`

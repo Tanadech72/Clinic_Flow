@@ -247,7 +247,7 @@
     const flags = `${hasText(v.allergies) ? `<span class="flag danger">⚠ แพ้ยา: ${escape(v.allergies)}</span>` : '<span class="flag ok">ไม่มีประวัติแพ้ยา</span>'}${hasText(v.underlying_conditions) ? `<span class="flag warn">โรคประจำตัว: ${escape(v.underlying_conditions)}</span>` : ''}`;
     const action = doctor && v.status === 'waiting' ? `<button data-treat="${v.id}">ตรวจรักษา</button>`
       : !doctor && v.status === 'ready' ? `<button data-dispense="${v.id}">${v.prescriptions.length ? 'ตรวจสอบและจ่ายยา' : 'ปิดคิว · ไม่มียา'}</button>` : '';
-    return `<article class="visit-card status-${v.status}">
+    return `<article class="visit-card status-${v.status}${highlightIds.has(v.id) ? ' is-new' : ''}">
       <header class="visit-head"><span class="queue-no" aria-label="ลำดับคิว">${index + 1}</span><div class="who"><h3>${escape(v.prefix || '')}${escape(v.first_name)} ${escape(v.last_name)}</h3><p>${facts}</p></div><div class="visit-status"><span class="tag ${v.status}">${labels[v.status]}</span><small>${time}</small></div></header>
       <div class="flags">${flags}</div>
       <div class="symptom"><small>อาการสำคัญ</small><p>${escape(v.symptoms || '-')}</p></div>
@@ -285,15 +285,51 @@
       else span.removeAttribute('aria-current');
     });
     const hints = { waiting: doctor ? 'ผู้ป่วยที่พร้อมให้ตรวจ' : 'ส่งเข้าคิวแล้ว รอหมอตรวจ', ready: doctor ? 'ส่งต่อพยาบาลแล้ว' : 'หมอสั่งยาแล้ว รอจ่าย', completed: 'จ่ายยาและปิดคิวแล้ว', cancelled: 'ผู้ป่วยกลับหรือลงทะเบียนผิด' };
-    $('filters').innerHTML = `<div class="stat-tiles" role="tablist" aria-label="สถานะคิว">${Object.keys(labels).map(s => `<button type="button" role="tab" aria-selected="${filter === s}" class="stat-tile tile-${s}${filter === s ? ' active' : ''}" data-filter="${s}"><span>${labels[s]}</span><b>${visits.filter(v => v.status === s).length}</b><small>${hints[s]}</small></button>`).join('')}</div><div class="toolbar-actions">${!doctor ? '<button id="newIntake">+ บันทึกก่อนตรวจ</button><a class="button secondary" href="/patients.html">ลงทะเบียนผู้ป่วยใหม่</a>' : ''}<button class="secondary" id="refresh">↻ รีเฟรชคิว</button></div>`;
+    $('filters').innerHTML = `<div class="stat-tiles" role="tablist" aria-label="สถานะคิว">${Object.keys(labels).map(s => `<button type="button" role="tab" aria-selected="${filter === s}" class="stat-tile tile-${s}${filter === s ? ' active' : ''}" data-filter="${s}"><span>${labels[s]}</span><b>${visits.filter(v => v.status === s).length}</b><small>${hints[s]}</small></button>`).join('')}</div><div class="toolbar-actions">${!doctor ? '<button id="newIntake">+ บันทึกก่อนตรวจ</button><a class="button secondary" href="/patients.html">ลงทะเบียนผู้ป่วยใหม่</a>' : ''}<span class="sync-status" id="syncStatus" role="status" aria-live="polite"></span><button class="secondary" id="refresh">↻ รีเฟรชคิว</button></div>`;
     const rows = visits.filter(v => v.status === filter);
     // คิวที่เสร็จสิ้นแล้ว เรียงจากที่จ่ายยาล่าสุดไว้บนสุด (คิวอื่นเรียงตามลำดับมาก่อน-หลังเหมือนเดิม)
     if (filter === 'completed') rows.sort((a, b) => new Date(b.dispensed_at) - new Date(a.dispensed_at));
     if (filter === 'cancelled') rows.sort((a, b) => new Date(b.cancelled_at) - new Date(a.cancelled_at));
     $('queue').innerHTML = rows.length ? `<div class="visit-grid">${rows.map(visitCard).join('')}</div>` :`<div class="empty"><h3>${filter === 'completed' ? 'ยังไม่มีคิวที่เสร็จสิ้นวันนี้' : filter === 'cancelled' ? 'ไม่มีคิวที่ยกเลิกวันนี้' : `ไม่มีผู้ป่วย${labels[filter]}`}</h3><p>${filter === 'cancelled' ? 'คิวที่ยกเลิกด้วยปุ่ม “ยกเลิกคิว” จะแสดงที่นี่พร้อมเหตุผล' : doctor ? 'เมื่อพยาบาลบันทึกข้อมูลก่อนตรวจ คิวผู้ป่วยจะแสดงที่นี่' : filter === 'ready' ? 'เมื่อหมอตรวจเสร็จ รายการจ่ายยาจะแสดงที่นี่' : 'เลือก “บันทึกก่อนตรวจ” เพื่อส่งผู้ป่วยเข้าคิว'}</p></div>`;
+    updateSyncStatus();
+  }
+  // ---- รีเฟรชคิวอัตโนมัติ ----
+  // ดึงคิวใหม่ทุก 15 วินาที วาดหน้าใหม่เฉพาะเมื่อข้อมูลเปลี่ยน (หน้าจอไม่กะพริบ)
+  // หยุดเมื่อแท็บถูกซ่อน และไม่รีเฟรชระหว่างกำลังส่งฟอร์ม
+  const AUTO_REFRESH_MS = 15000;
+  let lastSync = null, syncFailed = false, lastPayload = '', lastRenderMinute = -1, knownIds = null, highlightIds = new Set();
+  function updateSyncStatus() {
+    const status = $('syncStatus');
+    if (!status) return;
+    status.classList.toggle('failed', syncFailed);
+    status.textContent = syncFailed ? 'อัปเดตไม่สำเร็จ · จะลองใหม่อัตโนมัติ'
+      : lastSync ? `อัปเดตอัตโนมัติ · ล่าสุด ${lastSync.toLocaleTimeString('th-TH')}` : '';
   }
   // โหลดคิวล่าสุดจากเซิร์ฟเวอร์แล้ววาดหน้าใหม่
-  async function refresh() { try { visits = (await api('/api/visits')).data; render(); notice(); } catch (err) { notice(err); $('queue').innerHTML = '<div class="card empty">โหลดคิวไม่สำเร็จ กรุณาลองรีเฟรช</div>'; } }
+  // background = true: รีเฟรชอัตโนมัติ ถ้าโหลดไม่สำเร็จจะคงคิวเดิมไว้ แทนการล้างหน้าจอ
+  async function refresh({background = false} = {}) {
+    try {
+      const data = (await api('/api/visits')).data;
+      const payload = JSON.stringify(data);
+      // คิวที่เพิ่งปรากฏ (ไม่ใช่ตอนโหลดครั้งแรก) จะถูกไฮไลต์สั้น ๆ
+      highlightIds = new Set(knownIds ? data.filter(v => !knownIds.has(v.id)).map(v => v.id) : []);
+      knownIds = new Set(data.map(v => v.id));
+      lastSync = new Date(); syncFailed = false;
+      // ข้อมูลไม่เปลี่ยน -> ไม่ต้องวาดใหม่ ยกเว้นขึ้นนาทีใหม่ (ให้ข้อความ "รอ x นาที" บนการ์ดเดินต่อ)
+      const minute = Math.floor(Date.now() / 60000);
+      if (background && payload === lastPayload && minute === lastRenderMinute) { updateSyncStatus(); return; }
+      visits = data; lastPayload = payload; lastRenderMinute = minute;
+      render(); notice();
+    } catch (err) {
+      if (background) { syncFailed = true; updateSyncStatus(); return; }
+      notice(err); $('queue').innerHTML = '<div class="card empty">โหลดคิวไม่สำเร็จ กรุณาลองรีเฟรช</div>';
+    }
+  }
+  function startAutoRefresh() {
+    setInterval(() => { if (!document.hidden && !busy) refresh({background: true}); }, AUTO_REFRESH_MS);
+    // กลับมาที่แท็บนี้ -> รีเฟรชทันที ไม่ต้องรอรอบถัดไป
+    document.addEventListener('visibilitychange', () => { if (!document.hidden && !busy) refresh({background: true}); });
+  }
   let searchSerial = 0;
   // ค้นหาผู้ป่วยในหน้าต่างบันทึกก่อนตรวจ (ใช้ serial กันผลค้นหาเก่ามาทับผลใหม่)
   async function patients() {
@@ -395,6 +431,7 @@
       $('subtitle').textContent = `${user.full_name || user.username} · ${doctor ? `${user.role === 'admin' ? 'เจ้าของคลินิก' : 'แพทย์'} — ตรวจ วินิจฉัย และสั่งยา` : 'พยาบาล — บันทึกก่อนตรวจ และจ่ายยาตามคำสั่งแพทย์'}`;
       $('navigation').innerHTML = `<strong>Clinic Flow</strong><p>${{admin: 'เจ้าของคลินิก', doctor: 'แพทย์', nurse: 'พยาบาล'}[user.role]}</p><a class="active" href="${home}">${doctor ? 'ห้องตรวจ' : 'คิวตรวจและจ่ายยา'}</a><a href="/patients.html">ข้อมูลผู้ป่วย</a><a href="/records.html">ประวัติการรักษา</a><a href="/inventory.html">คลังยา</a>${doctor ? '<a href="/dashboard.html">ภาพรวมคลินิก</a>' : ''}${user.role === 'admin' ? '<a href="/users.html">บัญชีผู้ใช้งาน</a>' : ''}<a href="/account.html">บัญชีของฉัน</a>`;
       await refresh();
+      startAutoRefresh();
     } catch (err) { notice(err); $('queue').innerHTML = ''; }
   })();
 })();

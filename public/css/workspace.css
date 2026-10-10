@@ -208,3 +208,12 @@ body[data-workspace] button.danger:hover { background:#963a2f; }
 .rx-priced tfoot .total { font-size:17px; color:var(--primary-dark); }
 .rx-priced .price-warning { color:#8a5a12; }
 .rx-priced tfoot td[colspan] { text-align:left; color:var(--ink); padding:14px 16px; }
+
+/* รีเฟรชคิวอัตโนมัติ */
+.sync-status { margin-left:auto; align-self:center; color:var(--soft); font-size:12px; }
+.sync-status.failed { color:var(--danger); }
+.sync-status + #refresh { margin-left:0; }
+.visit-card.is-new { animation:new-visit 2.4s ease-out; }
+@keyframes new-visit { 0%, 35% { box-shadow:0 0 0 4px #9fd9cf, var(--shadow-hover); } 100% { box-shadow:var(--shadow); } }
+@media(max-width:760px) { .sync-status { flex-basis:100%; margin-left:0; order:5; } }
+@media(prefers-reduced-motion:reduce) { .visit-card.is-new { animation:none; outline:3px solid #9fd9cf; } }
