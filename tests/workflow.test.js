@@ -11,6 +11,10 @@ process.env.JWT_SECRET = 'workflow-test-secret';
 // เทสต์แต่ละข้อปรับค่าพวกนี้เพื่อจำลองสถานการณ์ต่าง ๆ
 let queries = [], visit = {id: 1, patient_id: 2, status: 'waiting', symptoms: 'cough', vital_signs: {}, medical_record_id: 9};
 let stock = 10, committed = 0, rolledBack = 0, allergies = '-';
+// ล็อตยาจำลอง (เรียงตามลำดับ FEFO ที่ SQL จริงจะคืนมา) setStock ตั้งให้มีล็อตเดียวเท่ากับสต๊อก
+let lots = [];
+const setStock = n => { stock = n; lots = [{id: 1, quantity_remaining: n}]; };
+setStock(10);
 // connection จำลองของ MySQL: ตอบตามรูปแบบคำสั่ง SQL และอัปเดตสถานะจำลองตามคำสั่ง UPDATE
 const connection = {
   beginTransaction: async () => {}, commit: async () => { committed++; }, rollback: async () => { rolledBack++; }, release() {},
@@ -31,6 +35,8 @@ const connection = {
     if (sql.includes("SET status = 'ready'")) visit.status = 'ready';
     if (sql.includes("SET status = 'completed'")) visit.status = 'completed';
     if (sql.includes("SET status = 'cancelled'")) Object.assign(visit, {status: 'cancelled', cancelled_by: values[0], cancel_reason: values[1]});
+    if (sql.startsWith('SELECT id, quantity_remaining FROM medicine_lots')) return [lots.filter(l => l.quantity_remaining > 0).map(l => ({...l}))];
+    if (sql.startsWith('UPDATE medicine_lots')) lots.find(l => l.id === values[1]).quantity_remaining -= values[0];
     if (sql.startsWith('UPDATE medicines')) stock -= values[0];
     return [{affectedRows: 1}];
   }
@@ -64,13 +70,13 @@ test('role authorization, treatment handoff, stock deducted once, shortages roll
   assert(!queries.some(q => q.sql.startsWith('UPDATE medicines') || q.sql.includes('INSERT INTO stock_transactions')));
   assert.equal(visit.status, 'ready');
   assert.equal((await request('/1/treatment', 'doctor', treatment)).status, 409);
-  stock = 1;
+  setStock(1);
   const before = committed;
   assert.equal((await request('/1/dispense', 'nurse')).status, 409);
   assert.equal(stock, 1); assert.equal(visit.status, 'ready'); assert.equal(committed, before);
-  stock = 10;
+  setStock(10);
   assert.equal((await request('/1/dispense', 'nurse')).status, 200);
-  assert.equal(stock, 8); assert.equal(visit.status, 'completed');
+  assert.equal(stock, 8); assert.equal(lots[0].quantity_remaining, 8); assert.equal(visit.status, 'completed');
   // บันทึกราคาต่อหน่วย ณ เวลาที่จ่าย และค่ายารวม (12.50 x 2 = 25)
   const priced = queries.find(q => q.sql.startsWith('UPDATE prescriptions SET unit_price'));
   assert.deepEqual(priced.values, [12.5, 8]);
@@ -120,6 +126,23 @@ test('allergy conflicts block treatment until the doctor records a reason', asyn
   queries = [];
   assert.equal((await request('/1/treatment', 'doctor', {...treatment, allergy_override: 'ไม่จำเป็นต้องใช้'})).status, 200);
   assert.equal(queries.find(q => q.sql.startsWith('INSERT INTO medical_records')).values[6], null);
+});
+// จ่ายยาตัดจากล็อตแรก (หมดอายุก่อน) จนหมดแล้วจึงตัดล็อตถัดไป และบันทึกประวัติแยกตามล็อต
+test('dispensing takes stock from lots in FEFO order and records each lot', async () => {
+  visit = {id: 1, patient_id: 2, status: 'ready', symptoms: 'cough', vital_signs: {}, medical_record_id: 9};
+  stock = 5; lots = [{id: 11, quantity_remaining: 1}, {id: 12, quantity_remaining: 4}];
+  queries = [];
+  assert.equal((await request('/1/dispense', 'nurse')).status, 200);
+  assert.deepEqual(lots.map(l => l.quantity_remaining), [0, 3]);
+  assert.equal(stock, 3);
+  const outs = queries.filter(q => q.sql.includes('INSERT INTO stock_transactions'));
+  assert.deepEqual(outs.map(q => [q.values[1], q.values[4]]), [[-1, 11], [-1, 12]]);
+  // ล็อตที่ยังไม่หมดอายุรวมกันไม่พอ (แม้สต๊อกรวมจะพอ) ต้องไม่ให้จ่าย
+  visit = {id: 1, patient_id: 2, status: 'ready', symptoms: 'cough', vital_signs: {}, medical_record_id: 9};
+  stock = 10; lots = [{id: 13, quantity_remaining: 1}];
+  assert.equal((await request('/1/dispense', 'nurse')).status, 409);
+  assert.equal(stock, 10); assert.equal(lots[0].quantity_remaining, 1); assert.equal(visit.status, 'ready');
+  setStock(10);
 });
 // ยกเลิกคิวได้เฉพาะคิวที่ยังไม่จ่ายยา ต้องมีเหตุผล และไม่ตัดสต๊อก
 test('waiting or ready visits can be cancelled with a reason, finished ones cannot', async () => {

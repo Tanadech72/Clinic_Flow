@@ -171,7 +171,7 @@
         : data.expiringSoon.map(m => `
           <tr>
             <td>${m.code}</td>
-            <td>${m.name}</td>
+            <td>${m.name}<br><small>ล็อต ${m.lot_number}</small></td>
             <td style="color:#f97316;">${formatDate(m.expiry_date, false)}</td>
             <td>${m.stock_quantity}</td>
           </tr>`).join('');

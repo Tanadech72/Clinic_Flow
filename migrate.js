@@ -46,6 +46,16 @@ async function addForeignKeyIfMissing(table, column, refTable, name) {
     // บันทึกค่ายาตอนจ่ายยา
     await addColumnIfMissing('prescriptions', 'unit_price', "DECIMAL(10,2) COMMENT 'ราคาต่อหน่วย ณ เวลาที่จ่ายยา' AFTER dosage_instructions");
     await addColumnIfMissing('clinic_visits', 'medicine_total', "DECIMAL(10,2) COMMENT 'ค่ายารวม ณ เวลาที่จ่ายยา' AFTER cancel_reason");
+    // แยกสต๊อกยาตามล็อต (เลขล็อต + วันหมดอายุ)
+    await pool.query(fs.readFileSync(path.join(__dirname, 'migrations/medicine-lots.sql'), 'utf8'));
+    await addColumnIfMissing('stock_transactions', 'lot_id', "INT COMMENT 'ล็อตที่รับเข้า/จ่ายออก (medicine_lots.id)' AFTER reference_id");
+    await addForeignKeyIfMissing('stock_transactions', 'lot_id', 'medicine_lots', 'fk_stock_transactions_lot');
+    // ยาที่มีสต๊อกอยู่แล้วแต่ยังไม่มีล็อต: ย้ายยอดเดิมเป็นล็อต "ยอดยกมา" ใช้วันหมดอายุเดิมของยา (ถ้ามี)
+    const [carried] = await pool.query(
+      `INSERT INTO medicine_lots (medicine_id, lot_number, expiry_date, quantity_received, quantity_remaining)
+       SELECT m.id, 'ยอดยกมา', m.expiry_date, m.stock_quantity, m.stock_quantity FROM medicines m
+       WHERE m.stock_quantity > 0 AND NOT EXISTS (SELECT 1 FROM medicine_lots l WHERE l.medicine_id = m.id)`
+    );
     let filled = 0;
     // เติมชื่อสามัญและกลุ่มยาให้ยาเดิม จับคู่ด้วยรหัสยาหรือชื่อยา (ไม่ทับข้อมูลที่กรอกไว้แล้ว)
     for (const item of catalog) {
@@ -57,7 +67,7 @@ async function addForeignKeyIfMissing(table, column, refTable, name) {
       filled += result.affectedRows;
     }
 
-    console.log(`Clinic workflow migration complete (existing records preserved, generic names filled: ${filled}).`);
+    console.log(`Clinic workflow migration complete (existing records preserved, generic names filled: ${filled}, carried-forward lots: ${carried.affectedRows}).`);
   } catch (err) {
     console.error(err.message);
     process.exitCode = 1;

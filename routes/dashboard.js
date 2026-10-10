@@ -28,14 +28,16 @@ router.get('/', authenticate, async (req, res) => {
        LIMIT 10`
     );
 
-    // ยาที่จะหมดอายุภายใน 90 วัน (รวมที่หมดอายุไปแล้ว)
+    // ล็อตยาที่ยังมีของเหลือและจะหมดอายุภายใน 90 วัน (รวมที่หมดอายุไปแล้ว)
     const [expiringSoon] = await pool.query(
-      `SELECT id, code, name, expiry_date, stock_quantity
-       FROM medicines
-       WHERE is_active = TRUE
-         AND expiry_date IS NOT NULL
-         AND expiry_date <= DATE_ADD(CURDATE(), INTERVAL 90 DAY)
-       ORDER BY expiry_date ASC
+      `SELECT l.id, m.code, m.name, l.lot_number, l.expiry_date, l.quantity_remaining AS stock_quantity
+       FROM medicine_lots l
+       JOIN medicines m ON m.id = l.medicine_id
+       WHERE m.is_active = TRUE
+         AND l.quantity_remaining > 0
+         AND l.expiry_date IS NOT NULL
+         AND l.expiry_date <= DATE_ADD(CURDATE(), INTERVAL 90 DAY)
+       ORDER BY l.expiry_date ASC
        LIMIT 10`
     );
 

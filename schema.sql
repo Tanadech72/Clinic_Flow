@@ -64,11 +64,30 @@ CREATE TABLE IF NOT EXISTS medicines (
   price_per_unit DECIMAL(10,2) NOT NULL DEFAULT 0,
   stock_quantity INT NOT NULL DEFAULT 0,
   reorder_level INT NOT NULL DEFAULT 10 COMMENT 'จุดสั่งซื้อเพิ่ม',
-  expiry_date DATE,
+  expiry_date DATE COMMENT 'เลิกใช้แล้ว วันหมดอายุแยกตามล็อตใน medicine_lots',
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_medicine_name (name)
+);
+
+-- ---------------------------------------------
+-- ตารางล็อตยา: ยาแต่ละตัวมีได้หลายล็อต แต่ละล็อตมีวันหมดอายุของตัวเอง
+-- medicines.stock_quantity = ผลรวม quantity_remaining ของทุกล็อต
+-- ---------------------------------------------
+CREATE TABLE IF NOT EXISTS medicine_lots (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  medicine_id INT NOT NULL,
+  lot_number VARCHAR(50) NOT NULL COMMENT 'เลขที่ล็อต (Lot No.) ตามฉลากหรือใบส่งของ',
+  expiry_date DATE COMMENT 'วันหมดอายุของล็อตนี้ (NULL = ยอดยกมาก่อนมีระบบล็อต ไม่ทราบวันหมดอายุ)',
+  quantity_received INT NOT NULL COMMENT 'จำนวนที่รับเข้ารวมของล็อตนี้',
+  quantity_remaining INT NOT NULL COMMENT 'จำนวนคงเหลือของล็อตนี้',
+  received_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_by INT COMMENT 'ผู้รับเข้าครั้งแรก (users.id)',
+  FOREIGN KEY (medicine_id) REFERENCES medicines(id),
+  FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+  UNIQUE KEY uq_medicine_lot (medicine_id, lot_number),
+  INDEX idx_lot_expiry (medicine_id, expiry_date)
 );
 
 -- ---------------------------------------------
@@ -115,9 +134,11 @@ CREATE TABLE IF NOT EXISTS stock_transactions (
   quantity INT NOT NULL COMMENT 'จำนวนที่เปลี่ยนแปลง (บวก=รับเข้า, ลบ=จ่ายออก/ปรับลด)',
   reason VARCHAR(255) COMMENT 'เช่น "รับสินค้าใหม่", "จ่ายตามใบสั่งยา #123", "ยาหมดอายุ"',
   reference_id INT COMMENT 'เช่น prescriptions.id เมื่อเป็นการจ่ายยา',
+  lot_id INT COMMENT 'ล็อตที่รับเข้า/จ่ายออก (medicine_lots.id)',
   created_by INT COMMENT 'users.id',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (medicine_id) REFERENCES medicines(id),
+  FOREIGN KEY (lot_id) REFERENCES medicine_lots(id),
   FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
   INDEX idx_stock_medicine (medicine_id)
 );

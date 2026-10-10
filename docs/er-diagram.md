@@ -1,6 +1,6 @@
 # แผนภาพความสัมพันธ์ของข้อมูล (ER Diagram) — Clinic Flow
 
-ฐานข้อมูล MySQL ชื่อ `clinic_flow` มี 8 ตาราง และความสัมพันธ์ (foreign key) 11 เส้น
+ฐานข้อมูล MySQL ชื่อ `clinic_flow` มี 9 ตาราง และความสัมพันธ์ (foreign key) 14 เส้น
 โครงสร้างตรงกับ `schema.sql` (ฐานข้อมูลใหม่) และ `npm run migrate` (อัปเกรดฐานข้อมูลเดิม)
 
 ## แผนภาพ
@@ -21,6 +21,9 @@ erDiagram
     medical_records ||--o{ prescriptions : "medical_record_id"
     medicines ||--o{ prescriptions : "medicine_id"
     medicines ||--o{ stock_transactions : "medicine_id"
+    medicines ||--o{ medicine_lots : "medicine_id"
+    medicine_lots |o--o{ stock_transactions : "lot_id"
+    users ||--o{ medicine_lots : "created_by (ผู้รับเข้า)"
 
     users {
         int id PK
@@ -101,7 +104,7 @@ erDiagram
         decimal price_per_unit
         int stock_quantity
         int reorder_level
-        date expiry_date
+        date expiry_date "เลิกใช้ ดู medicine_lots"
         boolean is_active
         datetime created_at
         datetime updated_at
@@ -113,12 +116,23 @@ erDiagram
         int quantity "บวก = รับเข้า, ลบ = จ่ายออก"
         varchar reason
         int reference_id "เลขรายการใบสั่งยา"
+        int lot_id FK "ล็อตที่รับเข้า/จ่ายออก"
         int created_by FK
         datetime created_at
     }
+    medicine_lots {
+        int id PK
+        int medicine_id FK
+        varchar lot_number "UK ร่วมกับ medicine_id"
+        date expiry_date "วันหมดอายุของล็อต"
+        int quantity_received
+        int quantity_remaining
+        datetime received_at
+        int created_by FK
+    }
 ```
 
-## ความสัมพันธ์ (11 เส้น)
+## ความสัมพันธ์ (14 เส้น)
 
 | ตาราง (ฝั่ง "หลาย") | คอลัมน์ | อ้างอิงตาราง (ฝั่ง "หนึ่ง") | ความหมาย |
 |---|---|---|---|
@@ -133,6 +147,9 @@ erDiagram
 | prescriptions | medicine_id | medicines | ยาที่สั่ง |
 | stock_transactions | medicine_id | medicines | ประวัติการเคลื่อนไหวสต๊อกของยาแต่ละตัว |
 | stock_transactions | created_by | users | ผู้ทำรายการรับเข้า / จ่ายออก |
+| stock_transactions | lot_id | medicine_lots | ล็อตที่รับเข้าหรือถูกตัดจ่าย (ยา 1 รายการในใบสั่งอาจตัดจากหลายล็อต) |
+| medicine_lots | medicine_id | medicines | ยา 1 ตัว มีได้หลายล็อต แต่ละล็อตมีวันหมดอายุของตัวเอง |
+| medicine_lots | created_by | users | ผู้รับยาล็อตนั้นเข้าครั้งแรก |
 
 `patient_hn_sequence` เป็นตารางเดี่ยว ไม่มีความสัมพันธ์กับตารางอื่น ใช้เก็บเลข HN ล่าสุดเพื่อสร้างเลขใหม่ไม่ให้ซ้ำ
 
@@ -146,7 +163,8 @@ erDiagram
 | clinic_visits | คิวการมารับบริการแต่ละครั้ง ตั้งแต่บันทึกก่อนตรวจจนจ่ายยาหรือยกเลิก |
 | medical_records | ประวัติการรักษา: อาการ การวินิจฉัย คำสั่งแพทย์ |
 | prescriptions | รายการยาที่สั่งในการรักษาแต่ละครั้ง |
-| medicines | ข้อมูลยา ราคา และจำนวนคงเหลือ |
+| medicines | ข้อมูลยา ราคา และจำนวนคงเหลือรวม (= ผลรวมคงเหลือของทุกล็อต) |
+| medicine_lots | ล็อตยาที่รับเข้า: เลขล็อต วันหมดอายุ จำนวนรับเข้าและคงเหลือ |
 | stock_transactions | ประวัติการรับยาเข้าและจ่ายยาออกทุกครั้ง |
 
 ## หลักการออกแบบที่ควรกล่าวถึงในรายงาน
@@ -154,10 +172,12 @@ erDiagram
 - **ไม่ลบข้อมูลสำคัญ:** ผู้ป่วย ผู้ใช้ และยาใช้คอลัมน์ `is_active` แทนการลบ เพื่อคงความสัมพันธ์กับประวัติการรักษาและประวัติสต๊อก
 - **เก็บค่า ณ เวลาที่เกิดเหตุการณ์:** `prescriptions.unit_price` และ `clinic_visits.medicine_total` เก็บราคาตอนจ่ายยา แม้ภายหลังเปลี่ยนราคา ประวัติเดิมก็ไม่เปลี่ยน ส่วนสัญญาณชีพเก็บใน `vital_signs` ของการมาแต่ละครั้ง
 - **ตรวจสอบย้อนหลังได้:** ทุกขั้นตอนบันทึกผู้ทำรายการ (nurse_id, doctor_id, dispensed_by, cancelled_by, created_by)
-- **สต๊อกสอดคล้องกับประวัติ:** การจ่ายยาทุกครั้งสร้างแถวใน `stock_transactions` ภายใน transaction เดียวกับการลดจำนวนใน `medicines`
+- **สต๊อกสอดคล้องกับประวัติ:** การจ่ายยาทุกครั้งสร้างแถวใน `stock_transactions` ภายใน transaction เดียวกับการลดจำนวนใน `medicine_lots` และ `medicines`
+- **หมดอายุก่อน จ่ายก่อน (FEFO):** ตอนจ่ายยา ระบบตัดจากล็อตที่หมดอายุเร็วที่สุดก่อน และไม่จ่ายจากล็อตที่หมดอายุแล้ว ทำให้ตามรอยได้ว่าผู้ป่วยได้ยาล็อตไหน (กรณีเรียกคืนยา)
 
 ## หมายเหตุ
 
-- **คอลัมน์ที่เลิกใช้:** ฐานข้อมูลที่อัปเกรดมาจากเวอร์ชันแรกอาจมี `patients.weight_kg` และ `patients.height_cm` คอลัมน์เหล่านี้คงไว้เพื่อไม่ให้ข้อมูลเดิมหาย ระบบปัจจุบันไม่ได้ใช้ และไม่มีใน `schema.sql` แล้ว
+- **ยอดยกมา:** `npm run migrate` ย้ายสต๊อกเดิมของยาแต่ละตัวเป็นล็อตชื่อ "ยอดยกมา" ใช้วันหมดอายุเดิมของยา (ถ้าไม่มีจะเป็นค่าว่าง และถูกจ่ายก่อนล็อตอื่น)
+- **คอลัมน์ที่เลิกใช้:** `medicines.expiry_date` ไม่ถูกใช้แล้ว เพราะวันหมดอายุแยกตามล็อต ฐานข้อมูลที่อัปเกรดมาจากเวอร์ชันแรกอาจมี `patients.weight_kg` และ `patients.height_cm` คอลัมน์เหล่านี้คงไว้เพื่อไม่ให้ข้อมูลเดิมหาย ระบบปัจจุบันไม่ได้ใช้ และไม่มีใน `schema.sql` แล้ว
 - **บทบาทที่ยังไม่ได้ใช้:** `users.role` รองรับค่า `pharmacist` และ `staff` เผื่อขยายระบบในอนาคต ปัจจุบันระบบใช้เพียง `admin` (เจ้าของคลินิก), `doctor` และ `nurse`
 - **change_type = adjustment** รองรับการปรับยอดสต๊อกในอนาคต ปัจจุบันระบบใช้ `in` และ `out`

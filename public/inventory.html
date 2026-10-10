@@ -52,7 +52,7 @@
               <th>ราคา/หน่วย</th>
               <th>จำนวนคงเหลือ</th>
               <th>จุดสั่งซื้อ</th>
-              <th>วันหมดอายุ</th>
+              <th>หมดอายุใกล้สุด</th>
               <th>จัดการ</th>
             </tr>
           </thead>
@@ -110,20 +110,12 @@
             <label>ราคาต่อหน่วย (price_per_unit)</label>
             <input type="number" step="0.01" id="price_per_unit" value="0">
           </div>
-          <div class="form-group" id="stockGroup">
-            <label>สต๊อกแรกเริ่ม (stock_quantity)</label>
-            <input type="number" id="stock_quantity" value="0">
-          </div>
           <div class="form-group">
             <label>จุดสั่งซื้อ (reorder_level)</label>
             <input type="number" id="reorder_level" value="10">
           </div>
         </div>
-
-        <div class="form-group">
-          <label>วันหมดอายุ (expiry_date)</label>
-          <input type="date" id="expiry_date">
-        </div>
+        <p class="field-help">สต๊อกและวันหมดอายุบันทึกแยกตามล็อต ผ่านปุ่ม "เติมสต๊อก"</p>
 
         <div class="modal-actions">
           <button type="button" class="btn" onclick="closeModal('medicineModal')">ยกเลิก</button>
@@ -141,9 +133,21 @@
       <form id="stockInForm" onsubmit="saveStockIn(event)">
         <input type="hidden" id="stock_in_id">
 
+        <div class="form-row">
+          <div class="form-group">
+            <label>เลขที่ล็อต (Lot No.) *</label>
+            <input type="text" id="stock_in_lot" required maxlength="50" placeholder="ตามฉลากยา เช่น A2410" list="stockInLots" autocomplete="off">
+            <datalist id="stockInLots"></datalist>
+          </div>
+          <div class="form-group">
+            <label>วันหมดอายุ (EXP) *</label>
+            <input type="date" id="stock_in_expiry" required>
+          </div>
+        </div>
+
         <div class="form-group">
           <label>จำนวนที่รับเข้า *</label>
-          <input type="number" id="stock_in_quantity" required min="1" placeholder="ระบุจำนวน">
+          <input type="number" id="stock_in_quantity" required min="1" step="1" placeholder="ระบุจำนวน">
         </div>
 
         <div class="form-group">
@@ -162,21 +166,40 @@
   <!-- Modal 3: ประวัติการเคลื่อนไหวสต๊อก (Transactions) -->
   <div class="modal" id="historyModal">
     <div class="modal-content" style="width:700px;">
-      <h2>ประวัติการเคลื่อนไหวสต๊อก</h2>
+      <h2>ล็อตยาและประวัติสต๊อก</h2>
       <p id="historyMedicineName" style="font-weight:bold; color:#0284c7;"></p>
-      <div style="max-height: 350px; overflow-y: auto;">
+      <h3>ล็อตที่ยังมียาเหลือ</h3>
+      <p class="field-help">เรียงตามลำดับที่ระบบตัดตอนจ่ายยา (หมดอายุก่อน จ่ายก่อน) ล็อตที่หมดอายุแล้วจะไม่ถูกจ่าย</p>
+      <div style="max-height: 200px; overflow-y: auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>เลขที่ล็อต</th>
+              <th>วันหมดอายุ</th>
+              <th>คงเหลือ / รับเข้า</th>
+              <th>รับเข้าเมื่อ</th>
+            </tr>
+          </thead>
+          <tbody id="tbLots">
+            <tr><td colspan="4">กำลังโหลดข้อมูล...</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <h3>ประวัติการเคลื่อนไหว</h3>
+      <div style="max-height: 300px; overflow-y: auto;">
         <table>
           <thead>
             <tr>
               <th>วันที่-เวลา</th>
               <th>ประเภท</th>
+              <th>ล็อต</th>
               <th>จำนวน</th>
               <th>เหตุผล</th>
               <th>ผู้บันทึก</th>
             </tr>
           </thead>
           <tbody id="tbHistory">
-            <tr><td colspan="5">กำลังโหลดข้อมูล...</td></tr>
+            <tr><td colspan="6">กำลังโหลดข้อมูล...</td></tr>
           </tbody>
         </table>
       </div>
@@ -218,19 +241,20 @@
 
         tbody.innerHTML = allMedicinesCache.map(m => {
           const isLow = Number(m.stock_quantity) <= Number(m.reorder_level);
+          const expired = Number(m.expired_quantity || 0);
           return `
             <tr>
               <td><strong>${m.code}</strong></td>
               <td>${m.name}${m.generic_name ? `<br><small class="muted">${m.generic_name}${m.drug_group ? ' · ' + m.drug_group : ''}</small>` : ''}</td>
               <td>${m.category || '-'}</td>
               <td>฿${Number(m.price_per_unit || 0).toFixed(2)}</td>
-              <td class="${isLow ? 'badge-danger' : 'badge-normal'}">${m.stock_quantity} ${m.unit || ''}</td>
+              <td class="${isLow ? 'badge-danger' : 'badge-normal'}">${m.stock_quantity} ${m.unit || ''}${expired ? `<br><small style="color:#ef4444;">หมดอายุแล้ว ${expired}</small>` : ''}</td>
               <td>${m.reorder_level}</td>
-              <td>${formatDate(m.expiry_date)}</td>
+              <td>${formatDate(m.nearest_expiry)}</td>
               <td>
-                <button class="btn btn-success btn-sm" onclick="openStockInModal(${m.id}, '${m.name}')">+ เติมสต๊อก</button>
+                <button class="btn btn-success btn-sm" onclick="openStockInModal(${m.id})">+ เติมสต๊อก</button>
                 ${isOwner ? `<button class="btn btn-warning btn-sm" onclick="editMedicine(${m.id})">แก้ไข</button>` : ''}
-                <button class="btn btn-info btn-sm" onclick="viewHistory(${m.id}, '${m.name}')">ประวัติ</button>
+                <button class="btn btn-info btn-sm" onclick="viewHistory(${m.id})">ล็อต/ประวัติ</button>
               </td>
             </tr>
           `;
@@ -249,7 +273,6 @@
       document.getElementById('edit_id').value = '';
       document.getElementById('medicineForm').reset();
       document.getElementById('code').disabled = false;
-      document.getElementById('stockGroup').style.display = 'block'; // แสดงช่องสต๊อกเมื่อเพิ่มยาใหม่
       document.getElementById('modalTitle').textContent = 'เพิ่มยาใหม่';
       document.getElementById('medicineModal').style.display = 'flex';
     }
@@ -272,9 +295,7 @@
       document.getElementById('unit').value = m.unit || '';
       document.getElementById('price_per_unit').value = m.price_per_unit || 0;
       document.getElementById('reorder_level').value = m.reorder_level || 10;
-      document.getElementById('expiry_date').value = m.expiry_date ? m.expiry_date.split('T')[0] : '';
 
-      document.getElementById('stockGroup').style.display = 'none'; // ซ่อนสต๊อก (การแก้ไขสต๊อกต้องใช้ปุ่มเติมสต๊อก)
       document.getElementById('modalTitle').textContent = 'แก้ไขข้อมูลยา';
       document.getElementById('medicineModal').style.display = 'flex';
     }
@@ -293,13 +314,8 @@
         category: document.getElementById('category').value,
         unit: document.getElementById('unit').value,
         price_per_unit: Number(document.getElementById('price_per_unit').value),
-        reorder_level: Number(document.getElementById('reorder_level').value),
-        expiry_date: document.getElementById('expiry_date').value || null
+        reorder_level: Number(document.getElementById('reorder_level').value)
       };
-
-      if (!editId) {
-        payload.stock_quantity = Number(document.getElementById('stock_quantity').value);
-      }
 
       try {
         const res = await fetch(url, {
@@ -313,9 +329,14 @@
 
         const data = await res.json();
         if (res.ok) {
-          alert(data.message);
           closeModal('medicineModal');
-          fetchMedicines();
+          await fetchMedicines();
+          // ยาใหม่มีสต๊อก 0 เสนอให้รับยาล็อตแรกเข้าต่อทันที
+          if (!editId && confirm(`${data.message}\nต้องการรับยาเข้าสต๊อก (ระบุล็อตและวันหมดอายุ) ตอนนี้เลยหรือไม่?`)) {
+            openStockInModal(data.medicineId, payload.name);
+          } else if (editId) {
+            alert(data.message);
+          }
         } else {
           alert(data.message || 'เกิดข้อผิดพลาด');
         }
@@ -325,18 +346,49 @@
     }
 
     // Modal รับเข้าสต๊อก (Stock-In)
-    function openStockInModal(id, name) {
-      document.getElementById('stock_in_id').value = id;
-      document.getElementById('stockInMedicineName').textContent = `ยา: ${name}`;
-      document.getElementById('stockInForm').reset();
-      document.getElementById('stockInModal').style.display = 'flex';
+    // แปลงวันที่จาก API เป็นรูปแบบ YYYY-MM-DD ตามเวลาเครื่อง สำหรับช่อง <input type="date">
+    function toInputDate(value) {
+      const d = value ? new Date(value) : new Date();
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     }
+
+    // ล็อตที่ยังมียาเหลือของยาที่กำลังเติมสต๊อก ใช้แนะนำเลขล็อตเดิมและเติมวันหมดอายุให้อัตโนมัติ
+    let stockInLots = [];
+
+    async function openStockInModal(id, name) {
+      const medicine = allMedicinesCache.find(item => item.id === id);
+      document.getElementById('stock_in_id').value = id;
+      document.getElementById('stockInMedicineName').textContent = `ยา: ${name || (medicine && medicine.name) || ''}`;
+      document.getElementById('stockInForm').reset();
+      document.getElementById('stock_in_expiry').min = toInputDate(); // รับเข้าเฉพาะยาที่ยังไม่หมดอายุ
+      document.getElementById('stockInModal').style.display = 'flex';
+
+      stockInLots = [];
+      document.getElementById('stockInLots').innerHTML = '';
+      try {
+        const res = await fetch(`/api/medicines/${id}/lots`, { headers: { 'Authorization': `Bearer ${token}` } });
+        stockInLots = (await res.json()).data || [];
+        document.getElementById('stockInLots').innerHTML = stockInLots
+          .filter(l => l.expiry_date)
+          .map(l => `<option value="${l.lot_number}">EXP ${formatDate(l.expiry_date)} · เหลือ ${l.quantity_remaining}</option>`).join('');
+      } catch (err) { console.error('โหลดล็อตไม่สำเร็จ', err); }
+    }
+
+    // เลือกเลขล็อตที่มีอยู่แล้ว -> เติมวันหมดอายุของล็อตนั้นให้ (ล็อตเดียวกันต้องหมดอายุวันเดียวกัน)
+    document.getElementById('stock_in_lot').addEventListener('input', (e) => {
+      const lot = stockInLots.find(l => l.lot_number === e.target.value.trim() && l.expiry_date);
+      if (lot) document.getElementById('stock_in_expiry').value = toInputDate(lot.expiry_date);
+    });
 
     async function saveStockIn(e) {
       e.preventDefault();
       const id = document.getElementById('stock_in_id').value;
-      const quantity = Number(document.getElementById('stock_in_quantity').value);
-      const reason = document.getElementById('stock_in_reason').value;
+      const payload = {
+        lot_number: document.getElementById('stock_in_lot').value.trim(),
+        expiry_date: document.getElementById('stock_in_expiry').value,
+        quantity: Number(document.getElementById('stock_in_quantity').value),
+        reason: document.getElementById('stock_in_reason').value
+      };
 
       try {
         const res = await fetch(`/api/medicines/${id}/stock-in`, {
@@ -345,7 +397,7 @@
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
-          body: JSON.stringify({ quantity, reason })
+          body: JSON.stringify(payload)
         });
 
         const data = await res.json();
@@ -361,11 +413,29 @@
       }
     }
 
-    // Modal ดูประวัติการย้ายสต๊อก (Transactions)
-    async function viewHistory(id, name) {
-      document.getElementById('historyMedicineName').textContent = `ยา: ${name}`;
-      document.getElementById('tbHistory').innerHTML = '<tr><td colspan="5">กำลังโหลดข้อมูล...</td></tr>';
+    // Modal ดูล็อตยาและประวัติการเคลื่อนไหวสต๊อก (Lots + Transactions)
+    async function viewHistory(id) {
+      const medicine = allMedicinesCache.find(item => item.id === id);
+      document.getElementById('historyMedicineName').textContent = `ยา: ${medicine ? medicine.name : ''}`;
+      document.getElementById('tbLots').innerHTML = '<tr><td colspan="4">กำลังโหลดข้อมูล...</td></tr>';
+      document.getElementById('tbHistory').innerHTML = '<tr><td colspan="6">กำลังโหลดข้อมูล...</td></tr>';
       document.getElementById('historyModal').style.display = 'flex';
+
+      try {
+        const res = await fetch(`/api/medicines/${id}/lots`, { headers: { 'Authorization': `Bearer ${token}` } });
+        const lots = (await res.json()).data || [];
+        document.getElementById('tbLots').innerHTML = lots.length === 0
+          ? '<tr><td colspan="4">ไม่มียาคงเหลือ</td></tr>'
+          : lots.map(l => `
+            <tr>
+              <td><strong>${l.lot_number}</strong></td>
+              <td style="${l.is_expired ? 'color:#ef4444; font-weight:bold;' : ''}">${l.expiry_date ? formatDate(l.expiry_date) : 'ไม่ทราบ'}${l.is_expired ? ' (หมดอายุแล้ว)' : ''}</td>
+              <td>${l.quantity_remaining} / ${l.quantity_received}</td>
+              <td>${formatDate(l.received_at)}</td>
+            </tr>`).join('');
+      } catch (err) {
+        document.getElementById('tbLots').innerHTML = '<tr><td colspan="4">ไม่สามารถดึงข้อมูลล็อตได้</td></tr>';
+      }
 
       try {
         const res = await fetch(`/api/medicines/${id}/transactions`, {
@@ -376,7 +446,7 @@
 
         const tbody = document.getElementById('tbHistory');
         if (rows.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="5">ยังไม่มีประวัติการทำรายการ</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="6">ยังไม่มีประวัติการทำรายการ</td></tr>';
           return;
         }
 
@@ -384,13 +454,14 @@
           <tr>
             <td>${new Date(r.created_at).toLocaleString('th-TH')}</td>
             <td><span style="color: ${r.change_type === 'in' ? '#10b981' : '#ef4444'}; font-weight:bold;">${r.change_type === 'in' ? 'รับเข้า (+)' : 'จ่ายออก (-)'}</span></td>
+            <td>${r.lot_number || '-'}</td>
             <td>${r.quantity}</td>
             <td>${r.reason || '-'}</td>
             <td>${r.created_by_name || '-'}</td>
           </tr>
         `).join('');
       } catch (err) {
-        document.getElementById('tbHistory').innerHTML = '<tr><td colspan="5">ไม่สามารถดึงข้อมูลประวัติได้</td></tr>';
+        document.getElementById('tbHistory').innerHTML = '<tr><td colspan="6">ไม่สามารถดึงข้อมูลประวัติได้</td></tr>';
       }
     }
 

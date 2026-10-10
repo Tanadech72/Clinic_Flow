@@ -118,6 +118,8 @@
     banner.hidden = !(selected && hasText(selected.allergies));
     banner.innerHTML = banner.hidden ? '' : `<span class="banner-icon" aria-hidden="true">⚠</span><div><b>ผู้ป่วยแพ้ยา: ${escape(selected.allergies)}</b><small>ระบบจะเตือนเมื่อเลือกยาที่แพ้หรือยากลุ่มเดียวกัน</small></div>`;
   }
+  // จำนวนที่จ่ายได้จริง = คงเหลือ - ส่วนที่หมดอายุแล้ว (ระบบไม่ให้จ่ายยาจากล็อตที่หมดอายุ)
+  const usableStock = m => Number(m.stock_quantity) - Number(m.expired_quantity || 0);
   // แสดงผลค้นหายา (สูงสุด 8 รายการ)
   // เรียง: ยาที่แพ้ตรงตัวขึ้นก่อน -> ยากลุ่มเดียวกัน -> ยาอื่นตามชื่อ เพื่อให้แพทย์เห็นคำเตือนก่อน
   function renderMedicineResults() {
@@ -127,8 +129,8 @@
     const rank = m => { const risk = medicineRisk(m); return risk ? (risk.level === 'direct' ? 0 : 1) : 2; };
     const found = medicines.filter(m => searchText(m).includes(query)).sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name, 'th')).slice(0, 8);
     list.innerHTML = found.length ? found.map(m => {
-      const risk = medicineRisk(m), taken = chosen.has(m.id), empty = Number(m.stock_quantity) <= 0;
-      const details = [m.generic_name, m.drug_group, `คงเหลือ ${m.stock_quantity} ${m.unit}`].filter(Boolean).map(escape).join(' · ');
+      const risk = medicineRisk(m), taken = chosen.has(m.id), empty = usableStock(m) <= 0;
+      const details = [m.generic_name, m.drug_group, `คงเหลือ ${usableStock(m)} ${m.unit}`].filter(Boolean).map(escape).join(' · ');
       return `<li role="option" aria-selected="false"><button type="button" class="medicine-result${risk ? ` risk-${risk.level}` : ''}" data-pick="${m.id}" ${taken ? 'disabled' : ''}>
         <span class="result-main"><b>${escape(m.name)}</b><small>${details}</small>${risk ? `<small class="result-reason">${escape(risk.reason)}</small>` : ''}</span>
         <span class="result-tags">${risk ? `<span class="result-badge ${risk.level}">${riskLabel(risk)}</span>` : ''}${empty ? '<span class="result-badge stock">สต๊อกหมด</span>' : ''}${taken ? '<span class="result-badge taken">เลือกแล้ว</span>' : ''}</span>
@@ -140,7 +142,7 @@
   function addMedicineRow(medicineId) {
     if ($('medicineRows').children.length >= medicines.length) return null;
     const row = document.createElement('div'); row.className = 'medicine-row';
-    row.innerHTML = `<select aria-label="ยา" required><option value="">เลือกยา</option>${medicines.map(m => { const risk = medicineRisk(m); return `<option value="${m.id}"${risk ? ` class="opt-risk-${risk.level}"` : ''}>${risk ? '⚠ แพ้ · ' : ''}${escape(m.name)} · เหลือ ${m.stock_quantity} ${escape(m.unit)}</option>`; }).join('')}</select><input type="number" aria-label="จำนวนยา" min="1" step="1" required placeholder="จำนวน"><input aria-label="วิธีใช้" required placeholder="วิธีใช้"><button type="button" class="secondary" data-remove>เอาออก</button><p class="row-alert" role="alert" hidden></p>`;
+    row.innerHTML = `<select aria-label="ยา" required><option value="">เลือกยา</option>${medicines.map(m => { const risk = medicineRisk(m); return `<option value="${m.id}"${risk ? ` class="opt-risk-${risk.level}"` : ''}>${risk ? '⚠ แพ้ · ' : ''}${escape(m.name)} · เหลือ ${usableStock(m)} ${escape(m.unit)}</option>`; }).join('')}</select><input type="number" aria-label="จำนวนยา" min="1" step="1" required placeholder="จำนวน"><input aria-label="วิธีใช้" required placeholder="วิธีใช้"><button type="button" class="secondary" data-remove>เอาออก</button><p class="row-alert" role="alert" hidden></p>`;
     $('medicineRows').append(row);
     if (medicineId) row.querySelector('select').value = String(medicineId);
     syncMedicineChoices(); updateAllergyWarnings();

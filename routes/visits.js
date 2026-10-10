@@ -160,15 +160,28 @@ router.post('/:id/dispense', authorize('nurse'), async (req, res) => {
     const [items] = await connection.query('SELECT * FROM prescriptions WHERE medical_record_id = ? ORDER BY medicine_id', [visit.medical_record_id]);
     let medicineTotal = 0;
     for (const item of items) {
-      // ล็อกแถวยาแล้วตรวจว่ายังใช้งานอยู่และสต๊อกพอ
+      // ล็อกแถวยาแล้วตรวจว่ายังใช้งานอยู่
       const [[medicine]] = await connection.query('SELECT * FROM medicines WHERE id = ? FOR UPDATE', [item.medicine_id]);
-      if (!medicine || !medicine.is_active || medicine.stock_quantity < item.quantity) {
-        throw failure(409, `ยา ${medicine ? medicine.name : item.medicine_id} ไม่พร้อมจ่ายหรือมีสต๊อกไม่เพียงพอ`);
+      if (!medicine || !medicine.is_active) throw failure(409, `ยา ${medicine ? medicine.name : item.medicine_id} ไม่พร้อมจ่าย`);
+      // ล็อตที่ยังไม่หมดอายุ เรียงแบบ FEFO (หมดอายุก่อนจ่ายก่อน) ยอดยกมาที่ไม่ทราบวันหมดอายุจ่ายก่อนสุด
+      const [lots] = await connection.query(`SELECT id, quantity_remaining FROM medicine_lots
+        WHERE medicine_id = ? AND quantity_remaining > 0 AND (expiry_date IS NULL OR expiry_date >= CURDATE())
+        ORDER BY expiry_date IS NOT NULL, expiry_date, id FOR UPDATE`, [item.medicine_id]);
+      const available = lots.reduce((sum, lot) => sum + lot.quantity_remaining, 0);
+      if (available < item.quantity) {
+        throw failure(409, `ยา ${medicine.name} มีสต๊อกที่ยังไม่หมดอายุไม่เพียงพอ (เหลือ ${available} ${medicine.unit || ''})`.trim());
       }
-      // ตัดสต๊อกและบันทึกประวัติการจ่ายออก (out) อ้างอิงเลขใบสั่งยา
+      // ตัดจากล็อตตามลำดับจนครบ บันทึกประวัติการจ่ายออก (out) แยกตามล็อต อ้างอิงเลขใบสั่งยา
+      let remaining = item.quantity;
+      for (const lot of lots) {
+        if (remaining === 0) break;
+        const take = Math.min(remaining, lot.quantity_remaining);
+        await connection.query('UPDATE medicine_lots SET quantity_remaining = quantity_remaining - ? WHERE id = ?', [take, lot.id]);
+        await connection.query(`INSERT INTO stock_transactions (medicine_id, change_type, quantity, reason, reference_id, lot_id, created_by)
+          VALUES (?, 'out', ?, ?, ?, ?, ?)`, [item.medicine_id, -take, `จ่ายตามใบสั่งยา #${item.id}`, item.id, lot.id, req.user.id]);
+        remaining -= take;
+      }
       await connection.query('UPDATE medicines SET stock_quantity = stock_quantity - ? WHERE id = ?', [item.quantity, item.medicine_id]);
-      await connection.query(`INSERT INTO stock_transactions (medicine_id, change_type, quantity, reason, reference_id, created_by)
-        VALUES (?, 'out', ?, ?, ?, ?)`, [item.medicine_id, -item.quantity, `จ่ายตามใบสั่งยา #${item.id}`, item.id, req.user.id]);
       // บันทึกราคาต่อหน่วย ณ เวลาที่จ่าย ถ้าภายหลังเปลี่ยนราคายา ประวัติเดิมยังแสดงราคาที่จ่ายจริง
       const unitPrice = Number(medicine.price_per_unit || 0);
       await connection.query('UPDATE prescriptions SET unit_price = ? WHERE id = ?', [unitPrice, item.id]);
