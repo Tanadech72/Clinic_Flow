@@ -155,6 +155,7 @@
               <p style="margin: 4px 0; font-size:14px;"><strong>อาการสำคัญ:</strong> ${r.symptoms || '-'}</p>
               <p style="margin: 4px 0; font-size:14px; color:#0284c7;"><strong>การวินิจฉัย:</strong> ${r.diagnosis}</p>
               <p style="margin: 4px 0; font-size:14px;"><strong>คำสั่งการรักษา:</strong> ${r.treatment_notes || '-'}</p>
+              ${r.allergy_override ? `<p class="flag warn" style="margin: 6px 0;"><strong>⚠ แพทย์ยืนยันสั่งยาที่ผู้ป่วยมีประวัติแพ้</strong> · เหตุผล: ${r.allergy_override}</p>` : ''}
 
               ${prescriptionsHtml}
             </div>

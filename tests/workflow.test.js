@@ -5,7 +5,7 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 process.env.JWT_SECRET = 'workflow-test-secret';
 let queries = [], visit = {id: 1, patient_id: 2, status: 'waiting', symptoms: 'cough', vital_signs: {}, medical_record_id: 9};
-let stock = 10, committed = 0, rolledBack = 0;
+let stock = 10, committed = 0, rolledBack = 0, allergies = '-';
 const connection = {
   beginTransaction: async () => {}, commit: async () => { committed++; }, rollback: async () => { rolledBack++; }, release() {},
   query: async (sql, values) => {
@@ -18,7 +18,8 @@ const connection = {
     }
     if (sql.startsWith('SELECT * FROM clinic_visits')) return [[{...visit}]];
     if (sql.startsWith('INSERT INTO medical_records')) return [{insertId: 9}];
-    if (sql.startsWith('SELECT id FROM medicines')) return [[{id: 3}]];
+    if (sql.startsWith('SELECT allergies FROM patients')) return [[{allergies}]];
+    if (sql.startsWith('SELECT id, name, generic_name')) return [[{id: 3, name: 'เทสตามอล 500 มก.', generic_name: 'testamol', drug_group: 'Tests'}, {id: 6, name: 'อีกตัว', generic_name: 'othermol', drug_group: 'Tests'}]];
     if (sql.startsWith('SELECT * FROM prescriptions')) return [[{id: 8, medicine_id: 3, quantity: 2}]];
     if (sql.startsWith('SELECT * FROM medicines')) return [[{id: 3, name: 'Test', is_active: 1, stock_quantity: stock}]];
     if (sql.includes("SET status = 'ready'")) visit.status = 'ready';
@@ -77,6 +78,31 @@ test('intake stores measurements per visit, computes BMI on server, and preserve
   }
   assert.equal((await request('/','nurse',{patient_id:2,symptoms:'No measurements'})).status,201);
   assert.deepEqual(visit.vital_signs,{weight_kg:null,height_cm:null,bmi:null});
+});
+test('allergy conflicts block treatment until the doctor records a reason', async () => {
+  visit = {id: 1, patient_id: 2, status: 'waiting', symptoms: 'rash', vital_signs: {}};
+  const treatment = {diagnosis: 'Test', medicines: [{medicine_id: 3, quantity: 1, dosage_instructions: 'Once'}]};
+  allergies = 'แพ้ Testamol (ผื่น)';
+  queries = [];
+  const blocked = await request('/1/treatment', 'doctor', treatment);
+  assert.equal(blocked.status, 409);
+  const body = await blocked.json();
+  assert.equal(body.code, 'ALLERGY_CONFLICT');
+  assert.equal(body.conflicts[0].level, 'direct');
+  assert(!queries.some(q => q.sql.startsWith('INSERT INTO medical_records')));
+  assert.equal(visit.status, 'waiting');
+  assert.equal((await request('/1/treatment', 'doctor', {...treatment, allergy_override: '  ok '})).status, 409);
+  allergies = 'Othermol';
+  assert.equal((await (await request('/1/treatment', 'doctor', treatment)).json()).conflicts[0].level, 'group');
+  queries = [];
+  assert.equal((await request('/1/treatment', 'doctor', {...treatment, allergy_override: 'ทดสอบแล้วไม่แพ้ เคยใช้ได้'})).status, 200);
+  const saved = queries.find(q => q.sql.startsWith('INSERT INTO medical_records'));
+  assert.equal(saved.values[6], 'ทดสอบแล้วไม่แพ้ เคยใช้ได้');
+  allergies = '-';
+  visit = {id: 1, patient_id: 2, status: 'waiting', symptoms: 'cough', vital_signs: {}};
+  queries = [];
+  assert.equal((await request('/1/treatment', 'doctor', {...treatment, allergy_override: 'ไม่จำเป็นต้องใช้'})).status, 200);
+  assert.equal(queries.find(q => q.sql.startsWith('INSERT INTO medical_records')).values[6], null);
 });
 test('all frontend scripts parse and legacy routes cannot dispense or delete patients', () => {
   for (const filename of fs.readdirSync('public').filter(f => f.endsWith('.html'))) {

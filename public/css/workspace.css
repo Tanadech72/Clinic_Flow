@@ -118,3 +118,20 @@ body[data-workspace] #historyDetails .card { border-radius:14px; padding:18px 20
   body[data-workspace] dialog { padding:20px; border-radius:18px; }
 }
 @media(prefers-reduced-motion:reduce) { .visit-card { transition:none; } }
+
+/* เตือนแพ้ยา */
+.allergy-panel { margin:14px 0 4px; padding:14px 16px; border-radius:14px; background:var(--danger-tint); border:1px solid #f3d4cf; }
+.allergy-panel h3 { margin:0 0 6px; color:var(--danger); font-size:15px; }
+.allergy-panel ul { margin:0 0 4px; padding-left:20px; color:var(--ink); line-height:1.7; }
+.allergy-panel li.group { color:#8a5a12; }
+.allergy-panel label { margin-top:10px; }
+.allergy-panel textarea { background:#fff; }
+body[data-workspace] .medicine-row.allergy-direct { background:var(--danger-tint); border-color:#efb9b1; }
+body[data-workspace] .medicine-row.allergy-group { background:var(--ready-tint); border-color:#efd7a6; }
+.medicine-row.allergy-direct select { border-color:var(--danger); color:var(--danger); font-weight:600; }
+.medicine-row.allergy-group select { border-color:var(--ready); }
+tr.allergy-hit.direct td { background:var(--danger-tint); }
+tr.allergy-hit.group td { background:var(--ready-tint); }
+.rx-flag { display:inline-block; padding:1px 8px; border-radius:999px; background:var(--danger); color:#fff; font-size:11.5px; font-weight:700; }
+tr.allergy-hit.group .rx-flag { background:var(--ready); }
+.allergy-override-note { margin:8px 0; padding:10px 12px; border-radius:11px; background:var(--ready-tint); border:1px solid #f1dfba; color:#6f4a10; font-size:13px; line-height:1.6; overflow-wrap:anywhere; }

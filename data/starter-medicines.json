@@ -1,15 +1,15 @@
 [
-  {"code":"GEN-PARA500","name":"พาราเซตามอล 500 มก.","category":"ยาแก้ปวดและลดไข้","unit":"เม็ด"},
-  {"code":"GEN-IBU200","name":"ไอบูโพรเฟน 200 มก.","category":"ยาแก้ปวดและต้านการอักเสบ","unit":"เม็ด"},
-  {"code":"GEN-LORA10","name":"ลอราทาดีน 10 มก.","category":"ยาแก้แพ้","unit":"เม็ด"},
-  {"code":"GEN-CPM4","name":"คลอร์เฟนิรามีน 4 มก.","category":"ยาแก้แพ้","unit":"เม็ด"},
-  {"code":"GEN-ORS","name":"ผงเกลือแร่ ORS","category":"ยาระบบทางเดินอาหาร","unit":"ซอง"},
-  {"code":"GEN-OME20","name":"โอเมพราโซล 20 มก. แคปซูลเคลือบลำไส้","category":"ยาลดกรดในกระเพาะอาหาร","unit":"แคปซูล"},
-  {"code":"GEN-METOC10","name":"เมโทโคลพราไมด์ 10 มก.","category":"ยาแก้คลื่นไส้อาเจียน","unit":"เม็ด"},
-  {"code":"GEN-SALB-MDI","name":"ซาลบูทามอล ยาสูดพ่น 100 ไมโครกรัม/ครั้ง","category":"ยาระบบทางเดินหายใจ","unit":"หลอดพ่น"},
-  {"code":"GEN-CLOTR1","name":"โคลไตรมาโซล ครีม 1%","category":"ยาทาผิวหนังต้านเชื้อรา","unit":"หลอด"},
-  {"code":"GEN-HYDRO1","name":"ไฮโดรคอร์ติโซน ครีม 1%","category":"ยาทาผิวหนังสเตียรอยด์","unit":"หลอด"},
-  {"code":"GEN-PVP10","name":"โพวิโดนไอโอดีน สารละลาย 10%","category":"ยาฆ่าเชื้อภายนอก","unit":"ขวด"},
-  {"code":"GEN-METFORM500","name":"เมทฟอร์มิน 500 มก.","category":"ยาเบาหวาน","unit":"เม็ด"},
-  {"code":"GEN-AMLO5","name":"แอมโลดิปีน 5 มก.","category":"ยาความดันโลหิต","unit":"เม็ด"}
+  {"code":"GEN-PARA500","name":"พาราเซตามอล 500 มก.","generic_name":"paracetamol","drug_group":"Paracetamol","category":"ยาแก้ปวดและลดไข้","unit":"เม็ด"},
+  {"code":"GEN-IBU200","name":"ไอบูโพรเฟน 200 มก.","generic_name":"ibuprofen","drug_group":"NSAIDs","category":"ยาแก้ปวดและต้านการอักเสบ","unit":"เม็ด"},
+  {"code":"GEN-LORA10","name":"ลอราทาดีน 10 มก.","generic_name":"loratadine","drug_group":"Antihistamines","category":"ยาแก้แพ้","unit":"เม็ด"},
+  {"code":"GEN-CPM4","name":"คลอร์เฟนิรามีน 4 มก.","generic_name":"chlorpheniramine","drug_group":"Antihistamines","category":"ยาแก้แพ้","unit":"เม็ด"},
+  {"code":"GEN-ORS","name":"ผงเกลือแร่ ORS","generic_name":"oral rehydration salts","drug_group":null,"category":"ยาระบบทางเดินอาหาร","unit":"ซอง"},
+  {"code":"GEN-OME20","name":"โอเมพราโซล 20 มก. แคปซูลเคลือบลำไส้","generic_name":"omeprazole","drug_group":"Proton pump inhibitors","category":"ยาลดกรดในกระเพาะอาหาร","unit":"แคปซูล"},
+  {"code":"GEN-METOC10","name":"เมโทโคลพราไมด์ 10 มก.","generic_name":"metoclopramide","drug_group":"Antiemetics","category":"ยาแก้คลื่นไส้อาเจียน","unit":"เม็ด"},
+  {"code":"GEN-SALB-MDI","name":"ซาลบูทามอล ยาสูดพ่น 100 ไมโครกรัม/ครั้ง","generic_name":"salbutamol","drug_group":"Beta-2 agonists","category":"ยาระบบทางเดินหายใจ","unit":"หลอดพ่น"},
+  {"code":"GEN-CLOTR1","name":"โคลไตรมาโซล ครีม 1%","generic_name":"clotrimazole","drug_group":"Azole antifungals","category":"ยาทาผิวหนังต้านเชื้อรา","unit":"หลอด"},
+  {"code":"GEN-HYDRO1","name":"ไฮโดรคอร์ติโซน ครีม 1%","generic_name":"hydrocortisone","drug_group":"Corticosteroids","category":"ยาทาผิวหนังสเตียรอยด์","unit":"หลอด"},
+  {"code":"GEN-PVP10","name":"โพวิโดนไอโอดีน สารละลาย 10%","generic_name":"povidone-iodine","drug_group":"Iodine","category":"ยาฆ่าเชื้อภายนอก","unit":"ขวด"},
+  {"code":"GEN-METFORM500","name":"เมทฟอร์มิน 500 มก.","generic_name":"metformin","drug_group":"Biguanides","category":"ยาเบาหวาน","unit":"เม็ด"},
+  {"code":"GEN-AMLO5","name":"แอมโลดิปีน 5 มก.","generic_name":"amlodipine","drug_group":"Calcium channel blockers","category":"ยาความดันโลหิต","unit":"เม็ด"}
 ]

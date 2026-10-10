@@ -5,6 +5,8 @@ const router = express.Router();
 const failure = (status, message) => Object.assign(new Error(message), { status });
 const validId = value => Number.isSafeInteger(Number(value)) && Number(value) > 0;
 const metrics = require('../public/js/patient-metrics');
+const allergyCheck = require('../public/js/allergy-check');
+const MIN_OVERRIDE_REASON = 5;
 
 router.use(authenticate, authorize('admin', 'doctor', 'nurse'));
 
@@ -12,7 +14,7 @@ router.get('/', async (req, res) => {
   try {
     const [rows] = await pool.query(`SELECT v.*, p.hn_code, p.prefix, p.first_name, p.last_name,
       p.date_of_birth, p.gender, p.blood_type, p.phone, p.address,
-      p.allergies, p.underlying_conditions, mr.diagnosis, mr.treatment_notes, u.full_name AS doctor_name
+      p.allergies, p.underlying_conditions, mr.diagnosis, mr.treatment_notes, mr.allergy_override, u.full_name AS doctor_name
       FROM clinic_visits v JOIN patients p ON p.id = v.patient_id
       LEFT JOIN medical_records mr ON mr.id = v.medical_record_id
       LEFT JOIN users u ON u.id = mr.doctor_id
@@ -21,7 +23,7 @@ router.get('/', async (req, res) => {
     for (const visit of rows) {
       visit.prescriptions = [];
       if (visit.medical_record_id) {
-        const [items] = await pool.query(`SELECT pr.*, m.name, m.unit, m.stock_quantity
+        const [items] = await pool.query(`SELECT pr.*, m.name, m.generic_name, m.drug_group, m.unit, m.stock_quantity
           FROM prescriptions pr JOIN medicines m ON m.id = pr.medicine_id
           WHERE pr.medical_record_id = ? ORDER BY pr.medicine_id`, [visit.medical_record_id]);
         visit.prescriptions = items;
@@ -67,7 +69,7 @@ router.post('/', authorize('nurse'), async (req, res) => {
 });
 
 router.post('/:id/treatment', authorize('admin', 'doctor'), async (req, res) => {
-  const { diagnosis, treatment_notes = '', medicines = [] } = req.body;
+  const { diagnosis, treatment_notes = '', medicines = [], allergy_override } = req.body;
   if (!validId(req.params.id) || typeof diagnosis !== 'string' || !diagnosis.trim() || !Array.isArray(medicines)
       || medicines.some(item => !item || !validId(item.medicine_id) || !validId(item.quantity)
         || typeof item.dosage_instructions !== 'string' || !item.dosage_instructions.trim())
@@ -81,12 +83,27 @@ router.post('/:id/treatment', authorize('admin', 'doctor'), async (req, res) => 
     const [[visit]] = await connection.query('SELECT * FROM clinic_visits WHERE id = ? FOR UPDATE', [req.params.id]);
     if (!visit) throw failure(404, 'ไม่พบคิวตรวจ');
     if (visit.status !== 'waiting') throw failure(409, 'คิวนี้บันทึกการรักษาแล้ว');
+
+    // ตรวจยาที่สั่งกับประวัติแพ้ยา ถ้าพบต้องมีเหตุผลยืนยันจากแพทย์จึงบันทึกได้
+    const [[patient]] = await connection.query('SELECT allergies FROM patients WHERE id = ?', [visit.patient_id]);
+    const [catalog] = await connection.query('SELECT id, name, generic_name, drug_group FROM medicines WHERE is_active = TRUE');
+    const ordered = medicines.map(item => catalog.find(m => m.id === Number(item.medicine_id)));
+    if (ordered.some(medicine => !medicine)) throw failure(400, 'ไม่พบยาที่เลือก');
+    const conflicts = allergyCheck.conflicts(patient && patient.allergies, ordered, catalog);
+    const overrideReason = typeof allergy_override === 'string' ? allergy_override.trim() : '';
+    if (conflicts.length && overrideReason.length < MIN_OVERRIDE_REASON) {
+      await connection.rollback();
+      return res.status(409).json({
+        message: `พบยาที่ผู้ป่วยอาจแพ้: ${conflicts.map(c => c.name).join(', ')} กรุณาเปลี่ยนยา หรือระบุเหตุผลที่ยืนยันสั่งยา`,
+        code: 'ALLERGY_CONFLICT', conflicts,
+      });
+    }
+
     const [record] = await connection.query(`INSERT INTO medical_records
-      (patient_id, doctor_id, symptoms, diagnosis, treatment_notes, vital_signs) VALUES (?, ?, ?, ?, ?, ?)`,
-    [visit.patient_id, req.user.id, visit.symptoms, diagnosis.trim(), treatment_notes, typeof visit.vital_signs === 'string' ? visit.vital_signs : JSON.stringify(visit.vital_signs || {})]);
+      (patient_id, doctor_id, symptoms, diagnosis, treatment_notes, vital_signs, allergy_override) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [visit.patient_id, req.user.id, visit.symptoms, diagnosis.trim(), treatment_notes, typeof visit.vital_signs === 'string' ? visit.vital_signs : JSON.stringify(visit.vital_signs || {}),
+      conflicts.length ? overrideReason : null]);
     for (const item of medicines) {
-      const [[medicine]] = await connection.query('SELECT id FROM medicines WHERE id = ? AND is_active = TRUE', [item.medicine_id]);
-      if (!medicine) throw failure(400, 'ไม่พบยาที่เลือก');
       await connection.query(`INSERT INTO prescriptions (medical_record_id, medicine_id, quantity, dosage_instructions)
         VALUES (?, ?, ?, ?)`, [record.insertId, item.medicine_id, item.quantity, item.dosage_instructions.trim()]);
     }

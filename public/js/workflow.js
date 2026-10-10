@@ -55,6 +55,24 @@
   const medicineNotice = document.createElement('p');
   medicineNotice.className = 'field-help'; medicineNotice.setAttribute('role', 'status');
   medicineNotice.setAttribute('aria-live', 'polite'); $('medicineRows').after(medicineNotice);
+  // เตือนเมื่อแพทย์เลือกยาที่ผู้ป่วยมีประวัติแพ้ ถ้าจะสั่งต่อต้องระบุเหตุผล (เซิร์ฟเวอร์ตรวจซ้ำอีกชั้น)
+  const allergyPanel = document.createElement('section');
+  allergyPanel.className = 'allergy-panel'; allergyPanel.hidden = true; allergyPanel.setAttribute('role', 'alert');
+  allergyPanel.innerHTML = '<h3>⚠ พบยาที่ผู้ป่วยอาจแพ้</h3><ul></ul><label for="allergyOverride">เหตุผลที่ยืนยันสั่งยานี้ *</label><textarea id="allergyOverride" rows="2" minlength="5" placeholder="เช่น ผู้ป่วยเคยใช้ยานี้ได้โดยไม่มีอาการแพ้ หรือไม่มียาทดแทน"></textarea><p class="field-help">ถ้าไม่ต้องการสั่งยานี้ ให้เปลี่ยนเป็นยาอื่นหรือกด “เอาออก” · เหตุผลจะถูกบันทึกในประวัติการรักษา</p>';
+  medicineNotice.after(allergyPanel);
+  function updateAllergyWarnings() {
+    const found = [];
+    $('medicineRows').querySelectorAll('.medicine-row').forEach(row => {
+      const medicine = medicines.find(m => m.id === Number(row.querySelector('select').value));
+      const result = selected && AllergyCheck.check(selected.allergies, medicine, medicines);
+      row.classList.toggle('allergy-direct', result?.level === 'direct');
+      row.classList.toggle('allergy-group', result?.level === 'group');
+      if (result) found.push(`<li class="${result.level}"><b>${escape(medicine.name)}</b> — ${escape(result.reason)}${result.level === 'group' ? ' (ยากลุ่มเดียวกัน)' : ''}</li>`);
+    });
+    allergyPanel.hidden = !found.length;
+    allergyPanel.querySelector('ul').innerHTML = found.join('');
+    $('allergyOverride').required = Boolean(found.length);
+  }
   function syncMedicineChoices() {
     const selects = [...$('medicineRows').querySelectorAll('select')];
     const chosen = new Set(selects.map(select => select.value).filter(Boolean));
@@ -74,7 +92,7 @@
     if (duplicate) {
       select.value = ''; medicineNotice.textContent = 'ยานี้ถูกเลือกแล้ว กรุณาปรับจำนวนในรายการเดิมหรือเลือกยาอื่น';
     } else { medicineNotice.textContent = ''; }
-    syncMedicineChoices();
+    syncMedicineChoices(); updateAllergyWarnings();
   });
   function info(v) {
     const vs = vitals(v);
@@ -114,14 +132,19 @@
       <div class="flags">${flags}</div>
       <div class="symptom"><small>อาการสำคัญ</small><p>${escape(v.symptoms || '-')}</p></div>
       ${vitalChips(vs)}
-      ${v.diagnosis ? `<div class="order"><p><small>การวินิจฉัย</small>${escape(v.diagnosis)}</p>${hasText(v.treatment_notes) ? `<p><small>คำสั่งแพทย์</small>${escape(v.treatment_notes)}</p>` : ''}<p class="muted">แพทย์: ${escape(v.doctor_name || '-')} · ยา ${v.prescriptions.length} รายการ</p>${prescriptions(v.prescriptions)}</div>` : ''}
+      ${v.diagnosis ? `<div class="order"><p><small>การวินิจฉัย</small>${escape(v.diagnosis)}</p>${hasText(v.treatment_notes) ? `<p><small>คำสั่งแพทย์</small>${escape(v.treatment_notes)}</p>` : ''}<p class="muted">แพทย์: ${escape(v.doctor_name || '-')} · ยา ${v.prescriptions.length} รายการ</p>${overrideNote(v.allergy_override)}${prescriptions(v.prescriptions, v.allergies)}</div>` : ''}
       <footer class="visit-actions"><button class="secondary" data-history="${v.patient_id}">ดูประวัติ</button>${action}</footer>
     </article>`;
   }
-  function prescriptions(items) {
+  function prescriptions(items, allergies) {
     if (!items.length) return '<p class="muted">ไม่มีรายการยา</p>';
-    return `<table><thead><tr><th>ยา</th><th>จำนวน</th><th>วิธีใช้</th></tr></thead><tbody>${items.map(p => `<tr><td>${escape(p.name || p.medicine_name)}</td><td>${escape(p.quantity)} ${escape(p.unit)}</td><td>${escape(p.dosage_instructions)}</td></tr>`).join('')}</tbody></table>`;
+    const catalog = items.map(p => ({...p, id: p.medicine_id}));
+    return `<table><thead><tr><th>ยา</th><th>จำนวน</th><th>วิธีใช้</th></tr></thead><tbody>${catalog.map(p => {
+      const risk = allergies && AllergyCheck.check(allergies, p, catalog);
+      return `<tr class="${risk ? `allergy-hit ${risk.level}` : ''}"><td>${risk ? `<span class="rx-flag" title="${escape(risk.reason)}">⚠ แพ้</span> ` : ''}${escape(p.name || p.medicine_name)}</td><td>${escape(p.quantity)} ${escape(p.unit)}</td><td>${escape(p.dosage_instructions)}</td></tr>`;
+    }).join('')}</tbody></table>`;
   }
+  const overrideNote = reason => hasText(reason) ? `<p class="allergy-override-note"><b>⚠ แพทย์ยืนยันสั่งยาที่ผู้ป่วยมีประวัติแพ้</b><br>เหตุผล: ${escape(reason)}</p>` : '';
   function render() {
     const step = filter === 'completed' ? -1 : filter === 'ready' ? 2 : doctor ? 1 : 0;
     document.querySelectorAll('.flow span').forEach((span, index) => {
@@ -156,19 +179,19 @@
     if (button.dataset.treat) {
       selected = visits.find(v => v.id === Number(button.dataset.treat));
       $('treatmentForm').reset(); $('medicineRows').innerHTML = ''; medicineNotice.textContent = ''; $('treatmentPatient').innerHTML = info(selected);
-      try { medicines = (await api('/api/medicines')).data; syncMedicineChoices(); $('treatmentDialog').showModal(); } catch (err) { notice(err); }
+      try { medicines = (await api('/api/medicines')).data; syncMedicineChoices(); updateAllergyWarnings(); $('treatmentDialog').showModal(); } catch (err) { notice(err); }
     }
     if (button.id === 'addMedicine') {
       if ($('medicineRows').children.length >= medicines.length) return;
       const row = document.createElement('div'); row.className = 'medicine-row';
-      row.innerHTML = `<select aria-label="ยา" required><option value="">เลือกยา</option>${medicines.map(m => `<option value="${m.id}">${escape(m.name)} · เหลือ ${m.stock_quantity} ${escape(m.unit)}</option>`).join('')}</select><input type="number" aria-label="จำนวนยา" min="1" step="1" required placeholder="จำนวน"><input aria-label="วิธีใช้" required placeholder="วิธีใช้"><button type="button" class="secondary" data-remove>เอาออก</button>`;
+      row.innerHTML = `<select aria-label="ยา" required><option value="">เลือกยา</option>${medicines.map(m => `<option value="${m.id}">${AllergyCheck.check(selected.allergies, m, medicines) ? '⚠ แพ้ · ' : ''}${escape(m.name)} · เหลือ ${m.stock_quantity} ${escape(m.unit)}</option>`).join('')}</select><input type="number" aria-label="จำนวนยา" min="1" step="1" required placeholder="จำนวน"><input aria-label="วิธีใช้" required placeholder="วิธีใช้"><button type="button" class="secondary" data-remove>เอาออก</button>`;
       $('medicineRows').append(row);
       syncMedicineChoices();
     }
-    if (button.hasAttribute('data-remove')) { button.parentElement.remove(); medicineNotice.textContent = ''; syncMedicineChoices(); }
+    if (button.hasAttribute('data-remove')) { button.parentElement.remove(); medicineNotice.textContent = ''; syncMedicineChoices(); updateAllergyWarnings(); }
     if (button.dataset.dispense) {
       selected = visits.find(v => v.id === Number(button.dataset.dispense)); $('dispenseForm').reset();
-      $('dispenseDetails').innerHTML = `${info(selected)}<p>การวินิจฉัย: ${escape(selected.diagnosis)}<br>คำสั่งแพทย์: ${escape(selected.treatment_notes || '-')}</p>${prescriptions(selected.prescriptions)}`;
+      $('dispenseDetails').innerHTML = `${info(selected)}<p>การวินิจฉัย: ${escape(selected.diagnosis)}<br>คำสั่งแพทย์: ${escape(selected.treatment_notes || '-')}</p>${overrideNote(selected.allergy_override)}${prescriptions(selected.prescriptions, selected.allergies)}`;
       $('dispenseSubmit').textContent = selected.prescriptions.length ? 'ยืนยันจ่ายยาและตัดสต๊อก' : 'ยืนยันปิดคิว';
       $('dispenseDialog').showModal();
     }
@@ -176,7 +199,7 @@
       $('historyDetails').textContent = 'กำลังโหลด…'; $('historyDialog').showModal();
       try {
         const result = await api(`/api/records/patient/${button.dataset.history}`);
-        $('historyDetails').innerHTML = result.data.length ? result.data.map(r => `<div class="card"><p>${escape(r.visit_date)} · ${escape(r.doctor_name)}<br>อาการ: ${escape(r.symptoms)}<br>การวินิจฉัย: ${escape(r.diagnosis)}<br>คำสั่ง: ${escape(r.treatment_notes)}</p>${bodyMeasurements(vitals(r))}${prescriptions(r.prescriptions || [])}</div>`).join('') : '<p>ยังไม่มีประวัติการรักษา</p>';
+        $('historyDetails').innerHTML = result.data.length ? result.data.map(r => `<div class="card"><p>${escape(r.visit_date)} · ${escape(r.doctor_name)}<br>อาการ: ${escape(r.symptoms)}<br>การวินิจฉัย: ${escape(r.diagnosis)}<br>คำสั่ง: ${escape(r.treatment_notes)}</p>${overrideNote(r.allergy_override)}${bodyMeasurements(vitals(r))}${prescriptions(r.prescriptions || [])}</div>`).join('') : '<p>ยังไม่มีประวัติการรักษา</p>';
       } catch (err) { $('historyDetails').textContent = err.message; }
     }
   });
@@ -198,7 +221,7 @@
     finally { busy = false; button.disabled = false; }
   }
   $('intakeForm').addEventListener('submit', e => submit(e, () => api('/api/visits', 'POST', {patient_id: Number($('patient').value), symptoms: $('symptoms').value, vital_signs: {bp: $('bp').value, pulse: $('pulse').value, temp: $('temp').value, weight_kg: $('intake_weight_kg').value === '' ? null : Number($('intake_weight_kg').value), height_cm: $('intake_height_cm').value === '' ? null : Number($('intake_height_cm').value)}})));
-  $('treatmentForm').addEventListener('submit', e => submit(e, () => api(`/api/visits/${selected.id}/treatment`, 'POST', {diagnosis: $('diagnosis').value, treatment_notes: $('notes').value, medicines: [...document.querySelectorAll('.medicine-row')].map(row => ({medicine_id: Number(row.querySelector('select').value), quantity: Number(row.querySelector('[type=number]').value), dosage_instructions: row.querySelector('input:not([type=number])').value}))})));
+  $('treatmentForm').addEventListener('submit', e => submit(e, () => api(`/api/visits/${selected.id}/treatment`, 'POST', {diagnosis: $('diagnosis').value, treatment_notes: $('notes').value, medicines: [...document.querySelectorAll('.medicine-row')].map(row => ({medicine_id: Number(row.querySelector('select').value), quantity: Number(row.querySelector('[type=number]').value), dosage_instructions: row.querySelector('input:not([type=number])').value})), ...(allergyPanel.hidden ? {} : {allergy_override: $('allergyOverride').value})})));
   $('dispenseForm').addEventListener('submit', e => submit(e, () => api(`/api/visits/${selected.id}/dispense`, 'POST', {})));
   $('logout').onclick = () => { localStorage.clear(); location.href = '/'; };
   (async () => {

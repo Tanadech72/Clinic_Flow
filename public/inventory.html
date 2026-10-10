@@ -84,6 +84,18 @@
 
         <div class="form-row">
           <div class="form-group">
+            <label>ชื่อสามัญภาษาอังกฤษ (generic name)</label>
+            <input type="text" id="generic_name" placeholder="เช่น ibuprofen">
+          </div>
+          <div class="form-group">
+            <label>กลุ่มยา (drug group)</label>
+            <input type="text" id="drug_group" placeholder="เช่น NSAIDs, Penicillins">
+          </div>
+        </div>
+        <p class="field-help">ใช้ตรวจประวัติแพ้ยาของผู้ป่วยตอนแพทย์สั่งยา ควรกรอกทุกครั้ง</p>
+
+        <div class="form-row">
+          <div class="form-group">
             <label>หมวดหมู่ (category)</label>
             <input type="text" id="category" placeholder="เช่น ยาแก้ปวด, ยาแก้ไอ">
           </div>
@@ -207,7 +219,7 @@
           return `
             <tr>
               <td><strong>${m.code}</strong></td>
-              <td>${m.name}</td>
+              <td>${m.name}${m.generic_name ? `<br><small class="muted">${m.generic_name}${m.drug_group ? ' · ' + m.drug_group : ''}</small>` : ''}</td>
               <td>${m.category || '-'}</td>
               <td>฿${Number(m.price_per_unit || 0).toFixed(2)}</td>
               <td class="${isLow ? 'badge-danger' : 'badge-normal'}">${m.stock_quantity} ${m.unit || ''}</td>
@@ -252,6 +264,8 @@
       document.getElementById('code').value = m.code;
       document.getElementById('code').disabled = true; // ห้ามแก้รหัสยา
       document.getElementById('name').value = m.name;
+      document.getElementById('generic_name').value = m.generic_name || '';
+      document.getElementById('drug_group').value = m.drug_group || '';
       document.getElementById('category').value = m.category || '';
       document.getElementById('unit').value = m.unit || '';
       document.getElementById('price_per_unit').value = m.price_per_unit || 0;
@@ -272,6 +286,8 @@
       const payload = {
         code: document.getElementById('code').value,
         name: document.getElementById('name').value,
+        generic_name: document.getElementById('generic_name').value.trim() || null,
+        drug_group: document.getElementById('drug_group').value.trim() || null,
         category: document.getElementById('category').value,
         unit: document.getElementById('unit').value,
         price_per_unit: Number(document.getElementById('price_per_unit').value),

@@ -12,8 +12,8 @@ const catalog = require('./data/starter-medicines.json');
     for (const item of catalog) {
       if (codes.has(item.code.toLowerCase()) || names.has(item.name.trim().toLowerCase())) { skipped++; continue; }
       await connection.query(`INSERT INTO medicines
-        (code, name, category, unit, price_per_unit, stock_quantity, reorder_level, expiry_date)
-        VALUES (?, ?, ?, ?, 0, 0, 10, NULL)`, [item.code, item.name, item.category, item.unit]);
+        (code, name, generic_name, drug_group, category, unit, price_per_unit, stock_quantity, reorder_level, expiry_date)
+        VALUES (?, ?, ?, ?, ?, ?, 0, 0, 10, NULL)`, [item.code, item.name, item.generic_name, item.drug_group, item.category, item.unit]);
       codes.add(item.code.toLowerCase()); names.add(item.name.trim().toLowerCase()); added++;
     }
     await connection.commit();

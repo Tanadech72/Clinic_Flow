@@ -10,8 +10,8 @@ router.get('/', authenticate, async (req, res) => {
     const { search = '', lowStockOnly } = req.query;
     const searchTerm = `%${search}%`;
 
-    let query = `SELECT * FROM medicines WHERE is_active = TRUE AND (name LIKE ? OR code LIKE ?)`;
-    const params = [searchTerm, searchTerm];
+    let query = `SELECT * FROM medicines WHERE is_active = TRUE AND (name LIKE ? OR code LIKE ? OR generic_name LIKE ?)`;
+    const params = [searchTerm, searchTerm, searchTerm];
 
     if (lowStockOnly === 'true') {
       query += ' AND stock_quantity <= reorder_level';
@@ -29,16 +29,16 @@ router.get('/', authenticate, async (req, res) => {
 // POST /api/medicines - เพิ่มยาใหม่
 router.post('/', authenticate, authorize('admin', 'doctor', 'nurse'), async (req, res) => {
   try {
-    const { code, name, category, unit, price_per_unit, stock_quantity, reorder_level, expiry_date } = req.body;
+    const { code, name, generic_name, drug_group, category, unit, price_per_unit, stock_quantity, reorder_level, expiry_date } = req.body;
 
     if (!code || !name || !unit) {
       return res.status(400).json({ message: 'กรุณากรอกข้อมูลที่จำเป็นให้ครบถ้วน (code, name, unit)' });
     }
 
     const [result] = await pool.query(
-      `INSERT INTO medicines (code, name, category, unit, price_per_unit, stock_quantity, reorder_level, expiry_date)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [code, name, category, unit, price_per_unit || 0, stock_quantity || 0, reorder_level || 10, expiry_date]
+      `INSERT INTO medicines (code, name, generic_name, drug_group, category, unit, price_per_unit, stock_quantity, reorder_level, expiry_date)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [code, name, generic_name || null, drug_group || null, category, unit, price_per_unit || 0, stock_quantity || 0, reorder_level || 10, expiry_date]
     );
 
     res.status(201).json({ message: 'เพิ่มยาสำเร็จ', medicineId: result.insertId });
@@ -53,7 +53,7 @@ router.post('/', authenticate, authorize('admin', 'doctor', 'nurse'), async (req
 // PUT /api/medicines/:id - แก้ไขข้อมูลยา
 router.put('/:id', authenticate, authorize('admin', 'doctor', 'nurse'), async (req, res) => {
   try {
-    const fields = ['name', 'category', 'unit', 'price_per_unit', 'reorder_level', 'expiry_date'];
+    const fields = ['name', 'generic_name', 'drug_group', 'category', 'unit', 'price_per_unit', 'reorder_level', 'expiry_date'];
     const updates = [];
     const values = [];
 
