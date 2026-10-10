@@ -177,3 +177,26 @@ body[data-workspace] .medicine-row.allergy-group { border:2px solid var(--ready)
 option.opt-risk-direct { color:#b4473a; font-weight:700; }
 option.opt-risk-group { color:#8a5a12; font-weight:700; }
 @media(max-width:760px) { body[data-workspace] .medicine-result { flex-direction:column; align-items:flex-start; } .result-tags { justify-content:flex-start; } }
+
+/* ยกเลิกคิว */
+.stat-tiles { grid-template-columns:repeat(4,minmax(0,1fr)); }
+.tile-cancelled b { color:var(--soft); }
+body[data-workspace] .tile-cancelled.active { border-color:#9aaaa6; background:#eef1f0; }
+.visit-card.status-cancelled { border-top-color:#b9c5c2; background:#fbfcfb; }
+.visit-card.status-cancelled .queue-no { background:#eef1f0; color:var(--muted); }
+body[data-workspace] .tag.cancelled { background:#eef1f0; color:var(--muted); }
+.cancel-note { margin:0; padding:10px 12px; border-radius:11px; background:#eef1f0; color:var(--ink); font-size:13.5px; line-height:1.6; overflow-wrap:anywhere; }
+.cancel-note small { color:var(--muted); }
+body[data-workspace] .cancel-visit { margin-right:auto; color:var(--danger); border-color:#f0d3ce; }
+body[data-workspace] .cancel-visit:hover { background:var(--danger-tint); border-color:#efb9b1; }
+#cancelDialog { width:560px; }
+.cancel-who { margin:0 0 8px; }
+.cancel-hint { margin:0 0 12px; padding:10px 12px; border-radius:11px; background:var(--ready-tint); color:#6f4a10; font-size:13px; }
+.reason-chips { border:0; padding:0; margin:0 0 6px; display:flex; flex-wrap:wrap; gap:8px; }
+.reason-chips legend { padding:0; margin-bottom:8px; font-size:13px; font-weight:600; color:var(--ink); }
+body[data-workspace] .chip { min-height:36px; padding:6px 14px; border-radius:999px; background:#fff; color:var(--ink); border:1px solid var(--line); box-shadow:none; font-weight:500; font-size:13px; }
+body[data-workspace] .chip:hover { background:#f2f6f4; }
+body[data-workspace] .chip.active { background:var(--primary-tint); border-color:var(--primary); color:var(--primary-dark); }
+body[data-workspace] button.danger { background:var(--danger); box-shadow:0 2px 6px #b4473a33; }
+body[data-workspace] button.danger:hover { background:#963a2f; }
+@media(max-width:760px) { .stat-tiles { grid-template-columns:repeat(2,minmax(0,1fr)); } }

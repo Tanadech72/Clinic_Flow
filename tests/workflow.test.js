@@ -24,6 +24,7 @@ const connection = {
     if (sql.startsWith('SELECT * FROM medicines')) return [[{id: 3, name: 'Test', is_active: 1, stock_quantity: stock}]];
     if (sql.includes("SET status = 'ready'")) visit.status = 'ready';
     if (sql.includes("SET status = 'completed'")) visit.status = 'completed';
+    if (sql.includes("SET status = 'cancelled'")) Object.assign(visit, {status: 'cancelled', cancelled_by: values[0], cancel_reason: values[1]});
     if (sql.startsWith('UPDATE medicines')) stock -= values[0];
     return [{affectedRows: 1}];
   }
@@ -103,6 +104,30 @@ test('allergy conflicts block treatment until the doctor records a reason', asyn
   queries = [];
   assert.equal((await request('/1/treatment', 'doctor', {...treatment, allergy_override: 'ไม่จำเป็นต้องใช้'})).status, 200);
   assert.equal(queries.find(q => q.sql.startsWith('INSERT INTO medical_records')).values[6], null);
+});
+test('waiting or ready visits can be cancelled with a reason, finished ones cannot', async () => {
+  visit = {id: 1, patient_id: 2, status: 'waiting', symptoms: 'cough', vital_signs: {}};
+  assert.equal((await request('/1/cancel', null, {reason: 'กลับก่อนตรวจ'})).status, 401);
+  assert.equal((await request('/1/cancel', 'nurse', {})).status, 400);
+  assert.equal((await request('/1/cancel', 'nurse', {reason: ' x '})).status, 400);
+  assert.equal(visit.status, 'waiting');
+  assert.equal((await request('/1/cancel', 'nurse', {reason: '  ผู้ป่วยกลับก่อนตรวจ  '})).status, 200);
+  assert.equal(visit.status, 'cancelled');
+  assert.equal(visit.cancelled_by, 5);
+  assert.equal(visit.cancel_reason, 'ผู้ป่วยกลับก่อนตรวจ');
+  assert.equal((await request('/1/cancel', 'doctor', {reason: 'ซ้ำ'})).status, 409);
+  assert.equal((await request('/1/treatment', 'doctor', {diagnosis: 'x', medicines: []})).status, 409);
+  assert.equal((await request('/1/dispense', 'nurse')).status, 409);
+
+  visit = {id: 1, patient_id: 2, status: 'ready', symptoms: 'cough', vital_signs: {}, medical_record_id: 9};
+  const stockBefore = stock;
+  assert.equal((await request('/1/cancel', 'doctor', {reason: 'ผู้ป่วยไม่รับยา'})).status, 200);
+  assert.equal(visit.status, 'cancelled');
+  assert.equal(stock, stockBefore);
+
+  visit = {id: 1, patient_id: 2, status: 'completed', symptoms: 'cough', vital_signs: {}};
+  assert.equal((await request('/1/cancel', 'nurse', {reason: 'จ่ายผิด'})).status, 409);
+  assert.equal(visit.status, 'completed');
 });
 test('all frontend scripts parse and legacy routes cannot dispense or delete patients', () => {
   for (const filename of fs.readdirSync('public').filter(f => f.endsWith('.html'))) {

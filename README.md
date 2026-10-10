@@ -147,6 +147,7 @@ npm test
 | POST | `/api/visits` | บันทึกอาการและสัญญาณชีพ ส่งเข้าคิวตรวจ | nurse |
 | POST | `/api/visits/:id/treatment` | วินิจฉัยและสั่งยา ส่งต่อพยาบาล (ยังไม่ตัดสต๊อก) | admin, doctor |
 | POST | `/api/visits/:id/dispense` | ยืนยันจ่ายยา ตัดสต๊อก และปิดคิว | nurse |
+| POST | `/api/visits/:id/cancel` | ยกเลิกคิวที่ยังไม่จ่ายยา พร้อมเหตุผล | admin, doctor, nurse |
 | GET | `/api/medicines` | ดูรายการยา/ค้นหา/กรองยาใกล้หมด | ผู้ล็อกอิน |
 | POST | `/api/medicines` | เพิ่มยาใหม่ | admin, doctor, nurse |
 | PUT | `/api/medicines/:id` | แก้ไขข้อมูลยา | admin, doctor, nurse |

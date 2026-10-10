@@ -21,6 +21,11 @@ async function addColumnIfMissing(table, column, definition) {
     await addColumnIfMissing('medicines', 'generic_name', "VARCHAR(100) COMMENT 'ชื่อสามัญภาษาอังกฤษ ใช้ตรวจประวัติแพ้ยา' AFTER name");
     await addColumnIfMissing('medicines', 'drug_group', "VARCHAR(100) COMMENT 'กลุ่มยา ใช้เตือนแพ้ข้ามยาในกลุ่มเดียวกัน' AFTER generic_name");
     await addColumnIfMissing('medical_records', 'allergy_override', "TEXT COMMENT 'เหตุผลที่แพทย์ยืนยันสั่งยาที่ผู้ป่วยมีประวัติแพ้' AFTER vital_signs");
+    // ยกเลิกคิว
+    await pool.query("ALTER TABLE clinic_visits MODIFY status ENUM('waiting', 'ready', 'completed', 'cancelled') NOT NULL DEFAULT 'waiting'");
+    await addColumnIfMissing('clinic_visits', 'cancelled_by', "INT COMMENT 'ผู้ยกเลิกคิว (users.id)' AFTER dispensed_at");
+    await addColumnIfMissing('clinic_visits', 'cancelled_at', 'DATETIME AFTER cancelled_by');
+    await addColumnIfMissing('clinic_visits', 'cancel_reason', "VARCHAR(255) COMMENT 'เหตุผลที่ยกเลิกคิว' AFTER cancelled_at");
     let filled = 0;
     for (const item of catalog) {
       const [result] = await pool.query(

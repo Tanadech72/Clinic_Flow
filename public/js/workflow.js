@@ -4,7 +4,8 @@
   const token = localStorage.getItem('token');
   let user, visits = [], medicines = [], selected, filter, busy = false;
   const doctor = document.body.dataset.workspace === 'doctor';
-  const labels = { waiting: 'รอตรวจ', ready: 'รอจ่ายยา', completed: 'เสร็จสิ้นวันนี้' };
+  const labels = { waiting: 'รอตรวจ', ready: 'รอจ่ายยา', completed: 'เสร็จสิ้นวันนี้', cancelled: 'ยกเลิกวันนี้' };
+  const cancelReasons = ['ผู้ป่วยกลับก่อนตรวจ', 'ลงทะเบียนผิดหรือซ้ำ', 'ผู้ป่วยไม่รับยา', 'ส่งต่อโรงพยาบาล'];
   const name = v => `${escape(v.hn_code)} · ${escape(v.prefix || '')}${escape(v.first_name)} ${escape(v.last_name)}`;
   const patientPanel = document.createElement('section');
   patientPanel.id = 'intakePatientDetails'; patientPanel.className = 'patient-summary';
@@ -143,6 +144,12 @@
     if (!picker.contains(event.relatedTarget)) { $('medicineResults').hidden = true; $('medicineSearch').setAttribute('aria-expanded', 'false'); }
   });
   $('medicineSearch').addEventListener('focus', renderMedicineResults);
+  // หน้าต่างยืนยันยกเลิกคิว ต้องระบุเหตุผลทุกครั้ง
+  const cancelDialog = document.createElement('dialog');
+  cancelDialog.id = 'cancelDialog';
+  cancelDialog.setAttribute('aria-labelledby', 'cancelTitle');
+  cancelDialog.innerHTML = `<h2 id="cancelTitle">ยกเลิกคิว</h2><div id="cancelPatient"></div><form id="cancelForm"><p class="cancel-hint" id="cancelHint"></p><fieldset class="reason-chips"><legend>เลือกเหตุผล</legend>${cancelReasons.map(r => `<button type="button" class="chip" data-reason="${r}">${r}</button>`).join('')}</fieldset><label for="cancelReason">เหตุผลที่ยกเลิก *</label><textarea id="cancelReason" rows="2" minlength="3" maxlength="255" required placeholder="เลือกจากด้านบน หรือพิมพ์เหตุผลเอง"></textarea><div class="actions"><button type="button" class="secondary" data-close>กลับ</button><button type="submit" class="danger">ยืนยันยกเลิกคิว</button></div></form>`;
+  document.body.append(cancelDialog);
   function syncMedicineChoices() {
     const selects = [...$('medicineRows').querySelectorAll('select')];
     const chosen = new Set(selects.map(select => select.value).filter(Boolean));
@@ -193,7 +200,8 @@
     const age = PatientMetrics.age(v.date_of_birth);
     const gender = {male: 'ชาย', female: 'หญิง', other: 'อื่น ๆ'}[v.gender] || 'ไม่ระบุเพศ';
     const facts = [escape(v.hn_code), gender, age === null ? 'ไม่ระบุอายุ' : `${age} ปี`, v.blood_type ? `กรุ๊ป ${escape(v.blood_type)}` : ''].filter(Boolean).join(' · ');
-    const time = v.status === 'completed' ? `เสร็จ ${clock(v.dispensed_at)}` : `${clock(v.created_at)} · ${waited(v.created_at)}`;
+    const time = v.status === 'completed' ? `เสร็จ ${clock(v.dispensed_at)}` : v.status === 'cancelled' ? `ยกเลิก ${clock(v.cancelled_at)}` : `${clock(v.created_at)} · ${waited(v.created_at)}`;
+    const cancellable = ['waiting', 'ready'].includes(v.status);
     const flags = `${hasText(v.allergies) ? `<span class="flag danger">⚠ แพ้ยา: ${escape(v.allergies)}</span>` : '<span class="flag ok">ไม่มีประวัติแพ้ยา</span>'}${hasText(v.underlying_conditions) ? `<span class="flag warn">โรคประจำตัว: ${escape(v.underlying_conditions)}</span>` : ''}`;
     const action = doctor && v.status === 'waiting' ? `<button data-treat="${v.id}">ตรวจรักษา</button>`
       : !doctor && v.status === 'ready' ? `<button data-dispense="${v.id}">${v.prescriptions.length ? 'ตรวจสอบและจ่ายยา' : 'ปิดคิว · ไม่มียา'}</button>` : '';
@@ -201,9 +209,10 @@
       <header class="visit-head"><span class="queue-no" aria-label="ลำดับคิว">${index + 1}</span><div class="who"><h3>${escape(v.prefix || '')}${escape(v.first_name)} ${escape(v.last_name)}</h3><p>${facts}</p></div><div class="visit-status"><span class="tag ${v.status}">${labels[v.status]}</span><small>${time}</small></div></header>
       <div class="flags">${flags}</div>
       <div class="symptom"><small>อาการสำคัญ</small><p>${escape(v.symptoms || '-')}</p></div>
+      ${v.status === 'cancelled' ? `<p class="cancel-note"><b>ยกเลิกคิว</b> · ${escape(v.cancel_reason || '-')}<br><small>โดย ${escape(v.cancelled_by_name || '-')} เวลา ${clock(v.cancelled_at)}</small></p>` : ''}
       ${vitalChips(vs)}
       ${v.diagnosis ? `<div class="order"><p><small>การวินิจฉัย</small>${escape(v.diagnosis)}</p>${hasText(v.treatment_notes) ? `<p><small>คำสั่งแพทย์</small>${escape(v.treatment_notes)}</p>` : ''}<p class="muted">แพทย์: ${escape(v.doctor_name || '-')} · ยา ${v.prescriptions.length} รายการ</p>${overrideNote(v.allergy_override)}${prescriptions(v.prescriptions, v.allergies)}</div>` : ''}
-      <footer class="visit-actions"><button class="secondary" data-history="${v.patient_id}">ดูประวัติ</button>${action}</footer>
+      <footer class="visit-actions">${cancellable ? `<button class="secondary cancel-visit" data-cancel="${v.id}">ยกเลิกคิว</button>` : ''}<button class="secondary" data-history="${v.patient_id}">ดูประวัติ</button>${action}</footer>
     </article>`;
   }
   function prescriptions(items, allergies) {
@@ -216,16 +225,19 @@
   }
   const overrideNote = reason => hasText(reason) ? `<p class="allergy-override-note"><b>⚠ แพทย์ยืนยันสั่งยาที่ผู้ป่วยมีประวัติแพ้</b><br>เหตุผล: ${escape(reason)}</p>` : '';
   function render() {
-    const step = filter === 'completed' ? -1 : filter === 'ready' ? 2 : doctor ? 1 : 0;
+    const step = ['completed', 'cancelled'].includes(filter) ? -1 : filter === 'ready' ? 2 : doctor ? 1 : 0;
     document.querySelectorAll('.flow span').forEach((span, index) => {
       span.classList.toggle('current', index === step);
       if (index === step) span.setAttribute('aria-current', 'step');
       else span.removeAttribute('aria-current');
     });
-    const hints = { waiting: doctor ? 'ผู้ป่วยที่พร้อมให้ตรวจ' : 'ส่งเข้าคิวแล้ว รอหมอตรวจ', ready: doctor ? 'ส่งต่อพยาบาลแล้ว' : 'หมอสั่งยาแล้ว รอจ่าย', completed: 'จ่ายยาและปิดคิวแล้ว' };
+    const hints = { waiting: doctor ? 'ผู้ป่วยที่พร้อมให้ตรวจ' : 'ส่งเข้าคิวแล้ว รอหมอตรวจ', ready: doctor ? 'ส่งต่อพยาบาลแล้ว' : 'หมอสั่งยาแล้ว รอจ่าย', completed: 'จ่ายยาและปิดคิวแล้ว', cancelled: 'ผู้ป่วยกลับหรือลงทะเบียนผิด' };
     $('filters').innerHTML = `<div class="stat-tiles" role="tablist" aria-label="สถานะคิว">${Object.keys(labels).map(s => `<button type="button" role="tab" aria-selected="${filter === s}" class="stat-tile tile-${s}${filter === s ? ' active' : ''}" data-filter="${s}"><span>${labels[s]}</span><b>${visits.filter(v => v.status === s).length}</b><small>${hints[s]}</small></button>`).join('')}</div><div class="toolbar-actions">${!doctor ? '<button id="newIntake">+ บันทึกก่อนตรวจ</button><a class="button secondary" href="/patients.html">ลงทะเบียนผู้ป่วยใหม่</a>' : ''}<button class="secondary" id="refresh">↻ รีเฟรชคิว</button></div>`;
     const rows = visits.filter(v => v.status === filter);
-    $('queue').innerHTML = rows.length ? `<div class="visit-grid">${rows.map(visitCard).join('')}</div>` :`<div class="empty"><h3>${filter === 'completed' ? 'ยังไม่มีคิวที่เสร็จสิ้นวันนี้' : `ไม่มีผู้ป่วย${labels[filter]}`}</h3><p>${doctor ? 'เมื่อพยาบาลบันทึกข้อมูลก่อนตรวจ คิวผู้ป่วยจะแสดงที่นี่' : filter === 'ready' ? 'เมื่อหมอตรวจเสร็จ รายการจ่ายยาจะแสดงที่นี่' : 'เลือก “บันทึกก่อนตรวจ” เพื่อส่งผู้ป่วยเข้าคิว'}</p></div>`;
+    // คิวที่เสร็จสิ้นแล้ว เรียงจากที่จ่ายยาล่าสุดไว้บนสุด (คิวอื่นเรียงตามลำดับมาก่อน-หลังเหมือนเดิม)
+    if (filter === 'completed') rows.sort((a, b) => new Date(b.dispensed_at) - new Date(a.dispensed_at));
+    if (filter === 'cancelled') rows.sort((a, b) => new Date(b.cancelled_at) - new Date(a.cancelled_at));
+    $('queue').innerHTML = rows.length ? `<div class="visit-grid">${rows.map(visitCard).join('')}</div>` :`<div class="empty"><h3>${filter === 'completed' ? 'ยังไม่มีคิวที่เสร็จสิ้นวันนี้' : filter === 'cancelled' ? 'ไม่มีคิวที่ยกเลิกวันนี้' : `ไม่มีผู้ป่วย${labels[filter]}`}</h3><p>${filter === 'cancelled' ? 'คิวที่ยกเลิกด้วยปุ่ม “ยกเลิกคิว” จะแสดงที่นี่พร้อมเหตุผล' : doctor ? 'เมื่อพยาบาลบันทึกข้อมูลก่อนตรวจ คิวผู้ป่วยจะแสดงที่นี่' : filter === 'ready' ? 'เมื่อหมอตรวจเสร็จ รายการจ่ายยาจะแสดงที่นี่' : 'เลือก “บันทึกก่อนตรวจ” เพื่อส่งผู้ป่วยเข้าคิว'}</p></div>`;
   }
   async function refresh() { try { visits = (await api('/api/visits')).data; render(); notice(); } catch (err) { notice(err); $('queue').innerHTML = '<div class="card empty">โหลดคิวไม่สำเร็จ กรุณาลองรีเฟรช</div>'; } }
   let searchSerial = 0;
@@ -254,6 +266,20 @@
     if (button.id === 'addMedicine') addMedicineRow();
     if (button.dataset.pick) pickMedicine(Number(button.dataset.pick));
     if (button.hasAttribute('data-remove')) { button.parentElement.remove(); medicineNotice.textContent = ''; syncMedicineChoices(); updateAllergyWarnings(); }
+    if (button.dataset.cancel) {
+      selected = visits.find(v => v.id === Number(button.dataset.cancel));
+      $('cancelForm').reset();
+      cancelDialog.querySelectorAll('.chip').forEach(chip => chip.classList.remove('active'));
+      $('cancelPatient').innerHTML = `<p class="cancel-who"><b>${name(selected)}</b><br><small>สถานะ: ${labels[selected.status]}</small></p>`;
+      $('cancelHint').textContent = selected.status === 'ready'
+        ? 'แพทย์ตรวจแล้ว ประวัติการรักษายังถูกเก็บไว้ แต่จะไม่จ่ายยาและไม่ตัดสต๊อก'
+        : 'ผู้ป่วยจะถูกนำออกจากคิวรอตรวจ และส่งเข้าคิวใหม่ได้ภายหลัง';
+      cancelDialog.showModal();
+    }
+    if (button.dataset.reason) {
+      $('cancelReason').value = button.dataset.reason;
+      cancelDialog.querySelectorAll('.chip').forEach(chip => chip.classList.toggle('active', chip === button));
+    }
     if (button.dataset.dispense) {
       selected = visits.find(v => v.id === Number(button.dataset.dispense)); $('dispenseForm').reset();
       $('dispenseDetails').innerHTML = `${info(selected)}<p>การวินิจฉัย: ${escape(selected.diagnosis)}<br>คำสั่งแพทย์: ${escape(selected.treatment_notes || '-')}</p>${overrideNote(selected.allergy_override)}${prescriptions(selected.prescriptions, selected.allergies)}`;
@@ -288,6 +314,7 @@
   $('intakeForm').addEventListener('submit', e => submit(e, () => api('/api/visits', 'POST', {patient_id: Number($('patient').value), symptoms: $('symptoms').value, vital_signs: {bp: $('bp').value, pulse: $('pulse').value, temp: $('temp').value, weight_kg: $('intake_weight_kg').value === '' ? null : Number($('intake_weight_kg').value), height_cm: $('intake_height_cm').value === '' ? null : Number($('intake_height_cm').value)}})));
   $('treatmentForm').addEventListener('submit', e => submit(e, () => api(`/api/visits/${selected.id}/treatment`, 'POST', {diagnosis: $('diagnosis').value, treatment_notes: $('notes').value, medicines: [...document.querySelectorAll('.medicine-row')].map(row => ({medicine_id: Number(row.querySelector('select').value), quantity: Number(row.querySelector('[type=number]').value), dosage_instructions: row.querySelector('input:not([type=number])').value})), ...(allergyPanel.hidden ? {} : {allergy_override: $('allergyOverride').value})})));
   $('dispenseForm').addEventListener('submit', e => submit(e, () => api(`/api/visits/${selected.id}/dispense`, 'POST', {})));
+  $('cancelForm').addEventListener('submit', e => submit(e, () => api(`/api/visits/${selected.id}/cancel`, 'POST', {reason: $('cancelReason').value})));
   $('logout').onclick = () => { localStorage.clear(); location.href = '/'; };
   (async () => {
     if (!token) { location.replace('/'); return; }

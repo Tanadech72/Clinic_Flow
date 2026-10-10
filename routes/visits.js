@@ -7,6 +7,7 @@ const validId = value => Number.isSafeInteger(Number(value)) && Number(value) > 
 const metrics = require('../public/js/patient-metrics');
 const allergyCheck = require('../public/js/allergy-check');
 const MIN_OVERRIDE_REASON = 5;
+const MIN_CANCEL_REASON = 3;
 
 router.use(authenticate, authorize('admin', 'doctor', 'nurse'));
 
@@ -14,11 +15,14 @@ router.get('/', async (req, res) => {
   try {
     const [rows] = await pool.query(`SELECT v.*, p.hn_code, p.prefix, p.first_name, p.last_name,
       p.date_of_birth, p.gender, p.blood_type, p.phone, p.address,
-      p.allergies, p.underlying_conditions, mr.diagnosis, mr.treatment_notes, mr.allergy_override, u.full_name AS doctor_name
+      p.allergies, p.underlying_conditions, mr.diagnosis, mr.treatment_notes, mr.allergy_override, u.full_name AS doctor_name, uc.full_name AS cancelled_by_name
       FROM clinic_visits v JOIN patients p ON p.id = v.patient_id
       LEFT JOIN medical_records mr ON mr.id = v.medical_record_id
       LEFT JOIN users u ON u.id = mr.doctor_id
-      WHERE v.status != 'completed' OR DATE(v.dispensed_at) = CURDATE()
+      LEFT JOIN users uc ON uc.id = v.cancelled_by
+      WHERE v.status IN ('waiting', 'ready')
+        OR (v.status = 'completed' AND DATE(v.dispensed_at) = CURDATE())
+        OR (v.status = 'cancelled' AND DATE(v.cancelled_at) = CURDATE())
       ORDER BY v.created_at ASC`);
     for (const visit of rows) {
       visit.prescriptions = [];
@@ -56,7 +60,7 @@ router.post('/', authorize('nurse'), async (req, res) => {
     await connection.beginTransaction();
     const [[patient]] = await connection.query('SELECT id FROM patients WHERE id = ? AND is_active = TRUE FOR UPDATE', [patient_id]);
     if (!patient) throw failure(404, 'ไม่พบผู้ป่วย');
-    const [open] = await connection.query("SELECT id FROM clinic_visits WHERE patient_id = ? AND status != 'completed'", [patient_id]);
+    const [open] = await connection.query("SELECT id FROM clinic_visits WHERE patient_id = ? AND status IN ('waiting', 'ready')", [patient_id]);
     if (open.length) throw failure(409, 'ผู้ป่วยรายนี้มีคิวที่ยังไม่เสร็จสิ้น');
     const [result] = await connection.query(`INSERT INTO clinic_visits (patient_id, nurse_id, symptoms, vital_signs)
       VALUES (?, ?, ?, ?)`, [patient_id, req.user.id, symptoms.trim(), JSON.stringify(intakeVitals)]);
@@ -141,6 +145,30 @@ router.post('/:id/dispense', authorize('nurse'), async (req, res) => {
   } catch (err) {
     if (connection) await connection.rollback();
     res.status(err.status || 500).json({ message: err.status ? err.message : 'จ่ายยาไม่สำเร็จ' });
+  } finally { if (connection) connection.release(); }
+});
+// ยกเลิกคิว เช่น ผู้ป่วยกลับก่อนตรวจ ลงทะเบียนผิด หรือไม่รับยา
+// ยกเลิกได้เฉพาะคิวที่ยังไม่จ่ายยา ไม่ตัดสต๊อก และไม่ลบประวัติการรักษาที่แพทย์บันทึกไว้แล้ว
+router.post('/:id/cancel', async (req, res) => {
+  const reason = typeof req.body.reason === 'string' ? req.body.reason.trim() : '';
+  if (!validId(req.params.id)) return res.status(400).json({ message: 'รหัสคิวไม่ถูกต้อง' });
+  if (reason.length < MIN_CANCEL_REASON || reason.length > 255) {
+    return res.status(400).json({ message: 'กรุณาระบุเหตุผลที่ยกเลิกคิว (3–255 ตัวอักษร)' });
+  }
+  let connection;
+  try {
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    const [[visit]] = await connection.query('SELECT * FROM clinic_visits WHERE id = ? FOR UPDATE', [req.params.id]);
+    if (!visit) throw failure(404, 'ไม่พบคิว');
+    if (!['waiting', 'ready'].includes(visit.status)) throw failure(409, 'คิวนี้จ่ายยาหรือยกเลิกไปแล้ว ยกเลิกซ้ำไม่ได้');
+    await connection.query(`UPDATE clinic_visits SET status = 'cancelled', cancelled_by = ?, cancelled_at = NOW(), cancel_reason = ?
+      WHERE id = ?`, [req.user.id, reason, visit.id]);
+    await connection.commit();
+    res.json({ message: 'ยกเลิกคิวแล้ว' });
+  } catch (err) {
+    if (connection) await connection.rollback();
+    res.status(err.status || 500).json({ message: err.status ? err.message : 'ยกเลิกคิวไม่สำเร็จ' });
   } finally { if (connection) connection.release(); }
 });
 module.exports = router;
