@@ -60,19 +60,89 @@
   allergyPanel.className = 'allergy-panel'; allergyPanel.hidden = true; allergyPanel.setAttribute('role', 'alert');
   allergyPanel.innerHTML = '<h3>⚠ พบยาที่ผู้ป่วยอาจแพ้</h3><ul></ul><label for="allergyOverride">เหตุผลที่ยืนยันสั่งยานี้ *</label><textarea id="allergyOverride" rows="2" minlength="5" placeholder="เช่น ผู้ป่วยเคยใช้ยานี้ได้โดยไม่มีอาการแพ้ หรือไม่มียาทดแทน"></textarea><p class="field-help">ถ้าไม่ต้องการสั่งยานี้ ให้เปลี่ยนเป็นยาอื่นหรือกด “เอาออก” · เหตุผลจะถูกบันทึกในประวัติการรักษา</p>';
   medicineNotice.after(allergyPanel);
+  const medicineRisk = medicine => selected && AllergyCheck.check(selected.allergies, medicine, medicines);
+  const riskLabel = risk => risk.level === 'direct' ? '⚠ ผู้ป่วยแพ้ยานี้' : '⚠ กลุ่มเดียวกับยาที่แพ้';
   function updateAllergyWarnings() {
     const found = [];
     $('medicineRows').querySelectorAll('.medicine-row').forEach(row => {
       const medicine = medicines.find(m => m.id === Number(row.querySelector('select').value));
-      const result = selected && AllergyCheck.check(selected.allergies, medicine, medicines);
+      const result = medicineRisk(medicine);
       row.classList.toggle('allergy-direct', result?.level === 'direct');
       row.classList.toggle('allergy-group', result?.level === 'group');
+      const rowAlert = row.querySelector('.row-alert');
+      rowAlert.hidden = !result;
+      rowAlert.innerHTML = result ? `<b>${riskLabel(result)}</b> · ${escape(result.reason)}` : '';
       if (result) found.push(`<li class="${result.level}"><b>${escape(medicine.name)}</b> — ${escape(result.reason)}${result.level === 'group' ? ' (ยากลุ่มเดียวกัน)' : ''}</li>`);
     });
     allergyPanel.hidden = !found.length;
     allergyPanel.querySelector('ul').innerHTML = found.join('');
     $('allergyOverride').required = Boolean(found.length);
   }
+  // ค้นหายาเพื่อเพิ่มในใบสั่งยา: ค้นได้ทั้งชื่อไทย ชื่อสามัญ รหัสยา กลุ่มยา และหมวดหมู่
+  // ยาที่ผู้ป่วยแพ้จะขึ้นด้านบนสุดของผลค้นหาพร้อมป้ายเตือน เพื่อให้แพทย์เห็นก่อนเลือก
+  const picker = document.createElement('div');
+  picker.className = 'medicine-picker';
+  picker.innerHTML = '<div class="allergy-banner" role="note" hidden></div><label for="medicineSearch">ค้นหายาเพื่อเพิ่มในใบสั่งยา</label><input id="medicineSearch" type="search" autocomplete="off" placeholder="พิมพ์ชื่อยา ชื่อสามัญ รหัสยา หรือกลุ่มยา เช่น พารา, ibuprofen, NSAIDs" aria-controls="medicineResults" aria-expanded="false"><ul id="medicineResults" class="medicine-results" role="listbox" aria-label="ผลการค้นหายา" hidden></ul>';
+  $('medicineRows').before(picker);
+  const searchText = m => [m.name, m.generic_name, m.code, m.drug_group, m.category].map(v => String(v || '').toLowerCase()).join(' ');
+  const chosenIds = () => new Set([...$('medicineRows').querySelectorAll('select')].map(select => Number(select.value)).filter(Boolean));
+  function renderAllergyBanner() {
+    const banner = picker.querySelector('.allergy-banner');
+    banner.hidden = !(selected && hasText(selected.allergies));
+    banner.innerHTML = banner.hidden ? '' : `<span class="banner-icon" aria-hidden="true">⚠</span><div><b>ผู้ป่วยแพ้ยา: ${escape(selected.allergies)}</b><small>ระบบจะเตือนเมื่อเลือกยาที่แพ้หรือยากลุ่มเดียวกัน</small></div>`;
+  }
+  function renderMedicineResults() {
+    const list = $('medicineResults'), query = $('medicineSearch').value.trim().toLowerCase();
+    if (!query) { list.hidden = true; $('medicineSearch').setAttribute('aria-expanded', 'false'); return; }
+    const chosen = chosenIds();
+    const rank = m => { const risk = medicineRisk(m); return risk ? (risk.level === 'direct' ? 0 : 1) : 2; };
+    const found = medicines.filter(m => searchText(m).includes(query)).sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name, 'th')).slice(0, 8);
+    list.innerHTML = found.length ? found.map(m => {
+      const risk = medicineRisk(m), taken = chosen.has(m.id), empty = Number(m.stock_quantity) <= 0;
+      const details = [m.generic_name, m.drug_group, `คงเหลือ ${m.stock_quantity} ${m.unit}`].filter(Boolean).map(escape).join(' · ');
+      return `<li role="option" aria-selected="false"><button type="button" class="medicine-result${risk ? ` risk-${risk.level}` : ''}" data-pick="${m.id}" ${taken ? 'disabled' : ''}>
+        <span class="result-main"><b>${escape(m.name)}</b><small>${details}</small>${risk ? `<small class="result-reason">${escape(risk.reason)}</small>` : ''}</span>
+        <span class="result-tags">${risk ? `<span class="result-badge ${risk.level}">${riskLabel(risk)}</span>` : ''}${empty ? '<span class="result-badge stock">สต๊อกหมด</span>' : ''}${taken ? '<span class="result-badge taken">เลือกแล้ว</span>' : ''}</span>
+      </button></li>`;
+    }).join('') : '<li class="no-result">ไม่พบยาที่ค้นหา</li>';
+    list.hidden = false; $('medicineSearch').setAttribute('aria-expanded', 'true');
+  }
+  function addMedicineRow(medicineId) {
+    if ($('medicineRows').children.length >= medicines.length) return null;
+    const row = document.createElement('div'); row.className = 'medicine-row';
+    row.innerHTML = `<select aria-label="ยา" required><option value="">เลือกยา</option>${medicines.map(m => { const risk = medicineRisk(m); return `<option value="${m.id}"${risk ? ` class="opt-risk-${risk.level}"` : ''}>${risk ? '⚠ แพ้ · ' : ''}${escape(m.name)} · เหลือ ${m.stock_quantity} ${escape(m.unit)}</option>`; }).join('')}</select><input type="number" aria-label="จำนวนยา" min="1" step="1" required placeholder="จำนวน"><input aria-label="วิธีใช้" required placeholder="วิธีใช้"><button type="button" class="secondary" data-remove>เอาออก</button><p class="row-alert" role="alert" hidden></p>`;
+    $('medicineRows').append(row);
+    if (medicineId) row.querySelector('select').value = String(medicineId);
+    syncMedicineChoices(); updateAllergyWarnings();
+    return row;
+  }
+  function pickMedicine(id) {
+    const existing = [...$('medicineRows').querySelectorAll('select')].find(select => Number(select.value) === id);
+    const row = existing ? existing.parentElement : addMedicineRow(id);
+    medicineNotice.textContent = existing ? 'ยานี้อยู่ในใบสั่งยาแล้ว ปรับจำนวนในรายการเดิมได้เลย' : '';
+    $('medicineSearch').value = ''; renderMedicineResults();
+    if (row) row.querySelector('[type=number]').focus();
+  }
+  $('medicineSearch').addEventListener('input', renderMedicineResults);
+  $('medicineSearch').addEventListener('keydown', event => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      const first = $('medicineResults').querySelector('[data-pick]:not(:disabled)');
+      if (first) pickMedicine(Number(first.dataset.pick));
+    }
+    if (event.key === 'ArrowDown') { event.preventDefault(); $('medicineResults').querySelector('[data-pick]:not(:disabled)')?.focus(); }
+    if (event.key === 'Escape' && $('medicineSearch').value) { event.preventDefault(); $('medicineSearch').value = ''; renderMedicineResults(); }
+  });
+  $('medicineResults').addEventListener('keydown', event => {
+    const buttons = [...$('medicineResults').querySelectorAll('[data-pick]:not(:disabled)')];
+    const index = buttons.indexOf(document.activeElement);
+    if (event.key === 'ArrowDown') { event.preventDefault(); buttons[Math.min(index + 1, buttons.length - 1)]?.focus(); }
+    if (event.key === 'ArrowUp') { event.preventDefault(); (index > 0 ? buttons[index - 1] : $('medicineSearch')).focus(); }
+  });
+  picker.addEventListener('focusout', event => {
+    if (!picker.contains(event.relatedTarget)) { $('medicineResults').hidden = true; $('medicineSearch').setAttribute('aria-expanded', 'false'); }
+  });
+  $('medicineSearch').addEventListener('focus', renderMedicineResults);
   function syncMedicineChoices() {
     const selects = [...$('medicineRows').querySelectorAll('select')];
     const chosen = new Set(selects.map(select => select.value).filter(Boolean));
@@ -179,15 +249,10 @@
     if (button.dataset.treat) {
       selected = visits.find(v => v.id === Number(button.dataset.treat));
       $('treatmentForm').reset(); $('medicineRows').innerHTML = ''; medicineNotice.textContent = ''; $('treatmentPatient').innerHTML = info(selected);
-      try { medicines = (await api('/api/medicines')).data; syncMedicineChoices(); updateAllergyWarnings(); $('treatmentDialog').showModal(); } catch (err) { notice(err); }
+      try { medicines = (await api('/api/medicines')).data; syncMedicineChoices(); updateAllergyWarnings(); renderAllergyBanner(); renderMedicineResults(); $('treatmentDialog').showModal(); } catch (err) { notice(err); }
     }
-    if (button.id === 'addMedicine') {
-      if ($('medicineRows').children.length >= medicines.length) return;
-      const row = document.createElement('div'); row.className = 'medicine-row';
-      row.innerHTML = `<select aria-label="ยา" required><option value="">เลือกยา</option>${medicines.map(m => `<option value="${m.id}">${AllergyCheck.check(selected.allergies, m, medicines) ? '⚠ แพ้ · ' : ''}${escape(m.name)} · เหลือ ${m.stock_quantity} ${escape(m.unit)}</option>`).join('')}</select><input type="number" aria-label="จำนวนยา" min="1" step="1" required placeholder="จำนวน"><input aria-label="วิธีใช้" required placeholder="วิธีใช้"><button type="button" class="secondary" data-remove>เอาออก</button>`;
-      $('medicineRows').append(row);
-      syncMedicineChoices();
-    }
+    if (button.id === 'addMedicine') addMedicineRow();
+    if (button.dataset.pick) pickMedicine(Number(button.dataset.pick));
     if (button.hasAttribute('data-remove')) { button.parentElement.remove(); medicineNotice.textContent = ''; syncMedicineChoices(); updateAllergyWarnings(); }
     if (button.dataset.dispense) {
       selected = visits.find(v => v.id === Number(button.dataset.dispense)); $('dispenseForm').reset();

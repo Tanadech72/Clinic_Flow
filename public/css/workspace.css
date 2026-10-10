@@ -135,3 +135,45 @@ tr.allergy-hit.group td { background:var(--ready-tint); }
 .rx-flag { display:inline-block; padding:1px 8px; border-radius:999px; background:var(--danger); color:#fff; font-size:11.5px; font-weight:700; }
 tr.allergy-hit.group .rx-flag { background:var(--ready); }
 .allergy-override-note { margin:8px 0; padding:10px 12px; border-radius:11px; background:var(--ready-tint); border:1px solid #f1dfba; color:#6f4a10; font-size:13px; line-height:1.6; overflow-wrap:anywhere; }
+
+/* ค้นหายาในใบสั่งยา */
+.medicine-picker { position:relative; margin:4px 0 14px; }
+.medicine-picker > label { display:block; margin:12px 0 8px; }
+#medicineSearch { padding-left:40px; background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238a9ca0' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E") 13px center/18px no-repeat; }
+.medicine-results { position:absolute; left:0; right:0; top:100%; z-index:5; margin:6px 0 0; padding:6px; list-style:none; background:#fff; border:1px solid var(--line); border-radius:14px; box-shadow:0 14px 34px #1d343924; max-height:360px; overflow-y:auto; }
+.medicine-results li { margin:0; }
+.medicine-results .no-result { padding:14px; color:var(--muted); text-align:center; }
+body[data-workspace] .medicine-result { display:flex; width:100%; justify-content:space-between; align-items:center; gap:12px; text-align:left; min-height:0; padding:10px 12px; margin:2px 0; border-radius:10px; background:transparent; color:var(--ink); border:1px solid transparent; box-shadow:none; font-weight:400; }
+body[data-workspace] .medicine-result:hover,body[data-workspace] .medicine-result:focus-visible { background:#f2f7f5; border-color:#d3e6e1; }
+body[data-workspace] .medicine-result:disabled { opacity:.55; cursor:default; background:transparent; }
+.result-main { display:flex; flex-direction:column; min-width:0; }
+.result-main b { font-weight:600; }
+.result-main small { color:var(--muted); font-size:12px; }
+.result-main .result-reason { color:var(--danger); font-weight:600; }
+.result-tags { display:flex; flex-wrap:wrap; gap:6px; justify-content:flex-end; flex-shrink:0; }
+.result-badge { padding:3px 10px; border-radius:999px; font-size:12px; font-weight:700; white-space:nowrap; }
+.result-badge.direct { background:var(--danger); color:#fff; }
+.result-badge.group { background:var(--ready); color:#fff; }
+.result-badge.stock { background:#eef1f0; color:var(--muted); }
+.result-badge.taken { background:var(--primary-tint); color:var(--primary-dark); }
+body[data-workspace] .medicine-result.risk-direct { background:var(--danger-tint); border-color:#efb9b1; border-left:5px solid var(--danger); }
+body[data-workspace] .medicine-result.risk-group { background:var(--ready-tint); border-color:#efd7a6; border-left:5px solid var(--ready); }
+body[data-workspace] .medicine-result.risk-direct:hover { background:#fadcd7; }
+body[data-workspace] .medicine-result.risk-group:hover { background:#fbe9c6; }
+
+/* แถบแสดงยาที่ผู้ป่วยแพ้ อยู่ติดกับส่วนสั่งยาตลอด */
+.allergy-banner { display:flex; align-items:center; gap:12px; padding:12px 16px; border-radius:14px; background:var(--danger); color:#fff; box-shadow:0 4px 14px #b4473a40; }
+.allergy-banner .banner-icon { display:grid; place-items:center; flex-shrink:0; width:34px; height:34px; border-radius:50%; background:#ffffff2e; font-size:18px; }
+.allergy-banner b { display:block; font-size:16px; overflow-wrap:anywhere; }
+.allergy-banner small { display:block; opacity:.9; font-size:12.5px; }
+
+/* แถวยาที่แพ้: เน้นให้ชัดขึ้น พร้อมข้อความเตือนในแถว */
+body[data-workspace] .medicine-row { flex-wrap:wrap; }
+body[data-workspace] .medicine-row.allergy-direct { border:2px solid var(--danger); border-left-width:6px; }
+body[data-workspace] .medicine-row.allergy-group { border:2px solid var(--ready); border-left-width:6px; }
+.row-alert { flex-basis:100%; margin:2px 2px 0; font-size:13px; line-height:1.5; }
+.allergy-direct .row-alert { color:var(--danger); }
+.allergy-group .row-alert { color:#8a5a12; }
+option.opt-risk-direct { color:#b4473a; font-weight:700; }
+option.opt-risk-group { color:#8a5a12; font-weight:700; }
+@media(max-width:760px) { body[data-workspace] .medicine-result { flex-direction:column; align-items:flex-start; } .result-tags { justify-content:flex-start; } }
