@@ -1,0 +1,13 @@
+/* พื้นฐานที่ทุกหน้าใช้ร่วมกัน: รีเซ็ตระยะห่างและพื้นหลัง */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: Arial, "Noto Sans Thai", sans-serif;
+}
+
+body {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #e0f2fe, #ecfeff);
+  color: #1e293b;
+}
