@@ -56,12 +56,18 @@ router.post('/', authenticate, authorize('admin', 'doctor', 'nurse'), async (req
   }
 });
 
-// PUT /api/medicines/:id - แก้ไขข้อมูลยา
-router.put('/:id', authenticate, authorize('admin', 'doctor', 'nurse'), async (req, res) => {
+// PUT /api/medicines/:id - แก้ไขข้อมูลยา (เฉพาะเจ้าของคลินิก)
+// เจ้าของคลินิกแก้รหัสยาได้ด้วย โดยรหัสใหม่ต้องไม่ว่างและไม่ซ้ำกับยาตัวอื่น
+// ประวัติการจ่ายยาและสต๊อกอ้างอิงยาด้วย id จึงไม่กระทบเมื่อเปลี่ยนรหัส
+router.put('/:id', authenticate, authorize('admin'), async (req, res) => {
   try {
+    if (req.body.code !== undefined) {
+      req.body.code = String(req.body.code).trim();
+      if (!req.body.code) return res.status(400).json({ message: 'รหัสยาต้องไม่เป็นค่าว่าง' });
+    }
     // ช่องที่อนุญาตให้แก้ไข (ไม่รวมรหัสยาและจำนวนสต๊อก)
     // การเปลี่ยนจำนวนสต๊อกต้องทำผ่านการรับยาเข้า เพื่อให้มีประวัติการเคลื่อนไหวเสมอ
-    const fields = ['name', 'generic_name', 'drug_group', 'category', 'unit', 'price_per_unit', 'reorder_level', 'expiry_date'];
+    const fields = ['code', 'name', 'generic_name', 'drug_group', 'category', 'unit', 'price_per_unit', 'reorder_level', 'expiry_date'];
     const updates = [];
     const values = [];
 
@@ -87,6 +93,9 @@ router.put('/:id', authenticate, authorize('admin', 'doctor', 'nurse'), async (r
 
     res.json({ message: 'แก้ไขข้อมูลยาสำเร็จ' });
   } catch (err) {
+    if (err.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({ message: 'รหัสยานี้มีอยู่แล้วในระบบ' });
+    }
     res.status(500).json({ message: 'เกิดข้อผิดพลาดในระบบ', error: err.message });
   }
 });

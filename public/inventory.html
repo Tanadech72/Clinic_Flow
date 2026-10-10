@@ -188,6 +188,8 @@
 
   <script>
     const token = localStorage.getItem('token');
+    // แก้ไขข้อมูลยาได้เฉพาะเจ้าของคลินิก (เซิร์ฟเวอร์ก็ตรวจสิทธิ์ซ้ำ) บทบาทอื่นเพิ่มยาและเติมสต๊อกได้ตามปกติ
+    let isOwner = false;
     if (!token) window.location.href = '/';
 
     let allMedicinesCache = [];
@@ -227,7 +229,7 @@
               <td>${formatDate(m.expiry_date)}</td>
               <td>
                 <button class="btn btn-success btn-sm" onclick="openStockInModal(${m.id}, '${m.name}')">+ เติมสต๊อก</button>
-                <button class="btn btn-warning btn-sm" onclick="editMedicine(${m.id})">แก้ไข</button>
+                ${isOwner ? `<button class="btn btn-warning btn-sm" onclick="editMedicine(${m.id})">แก้ไข</button>` : ''}
                 <button class="btn btn-info btn-sm" onclick="viewHistory(${m.id}, '${m.name}')">ประวัติ</button>
               </td>
             </tr>
@@ -262,7 +264,7 @@
 
       document.getElementById('edit_id').value = m.id;
       document.getElementById('code').value = m.code;
-      document.getElementById('code').disabled = true; // ห้ามแก้รหัสยา
+      document.getElementById('code').disabled = false; // เจ้าของคลินิกแก้รหัสยาได้ (เซิร์ฟเวอร์ตรวจไม่ให้ซ้ำ)
       document.getElementById('name').value = m.name;
       document.getElementById('generic_name').value = m.generic_name || '';
       document.getElementById('drug_group').value = m.drug_group || '';
@@ -392,7 +394,14 @@
       }
     }
 
-    fetchMedicines();
+    // โหลดบทบาทผู้ใช้ก่อน เพื่อแสดงปุ่มแก้ไขเฉพาะเจ้าของคลินิก แล้วจึงโหลดรายการยา
+    (async () => {
+      try {
+        const res = await fetch('/api/auth/me', { headers: { 'Authorization': `Bearer ${token}` } });
+        if (res.ok) isOwner = (await res.json()).user.role === 'admin';
+      } catch (err) { console.error('โหลดสิทธิ์ไม่สำเร็จ', err); }
+      fetchMedicines();
+    })();
   </script>
 <script src="/js/role-navigation.js"></script>
 <script src="/js/app-ui.js?v=2"></script>

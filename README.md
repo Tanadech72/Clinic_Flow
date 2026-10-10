@@ -150,7 +150,7 @@ npm test
 | POST | `/api/visits/:id/cancel` | ยกเลิกคิวที่ยังไม่จ่ายยา พร้อมเหตุผล | admin, doctor, nurse |
 | GET | `/api/medicines` | ดูรายการยา/ค้นหา/กรองยาใกล้หมด | ผู้ล็อกอิน |
 | POST | `/api/medicines` | เพิ่มยาใหม่ | admin, doctor, nurse |
-| PUT | `/api/medicines/:id` | แก้ไขข้อมูลยา | admin, doctor, nurse |
+| PUT | `/api/medicines/:id` | แก้ไขข้อมูลยา รวมถึงรหัสยา (ห้ามซ้ำ) | admin |
 | POST | `/api/medicines/:id/stock-in` | รับยาเข้าสต๊อก | admin, doctor, nurse |
 | GET | `/api/medicines/:id/transactions` | ประวัติการเคลื่อนไหวสต๊อก | ผู้ล็อกอิน |
 | GET | `/api/dashboard` | สรุปข้อมูลภาพรวมคลินิก | ผู้ล็อกอิน |
