@@ -1,0 +1,16 @@
+# Dependencies (ติดตั้งใหม่ได้ด้วย npm install)
+node_modules/
+
+# ค่าตั้งค่าที่มีรหัสผ่านและ secret (ใช้ .env.example เป็นตัวอย่างแทน)
+.env
+.env.*
+!.env.example
+
+# Logs
+npm-debug.log*
+*.log
+
+# ไฟล์ระบบและ editor
+.DS_Store
+Thumbs.db
+.vscode/
