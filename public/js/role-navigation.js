@@ -10,7 +10,7 @@
     if (nurse && location.pathname === '/dashboard.html') { location.replace(home); return; }
     const menu = document.querySelector('.sidebar-menu');
     if (menu) {
-      menu.innerHTML = `<li><a href="${home}">${nurse ? 'คิวตรวจและจ่ายยา' : 'ห้องตรวจแพทย์'}</a></li><li><a href="/patients.html">ข้อมูลผู้ป่วย</a></li><li><a href="/records.html">ประวัติการรักษา</a></li><li><a href="/inventory.html">คลังยา</a></li>${!nurse ? '<li><a href="/dashboard.html">ภาพรวมคลินิก</a></li><li><a href="/users.html">บัญชีผู้ใช้งาน</a></li>' : ''}`;
+      menu.innerHTML = `<li><a href="${home}">${nurse ? 'คิวตรวจและจ่ายยา' : 'ห้องตรวจแพทย์'}</a></li><li><a href="/patients.html">ข้อมูลผู้ป่วย</a></li><li><a href="/records.html">ประวัติการรักษา</a></li><li><a href="/inventory.html">คลังยา</a></li>${!nurse ? '<li><a href="/dashboard.html">ภาพรวมคลินิก</a></li>' : ''}${user.role === 'admin' ? '<li><a href="/users.html">บัญชีผู้ใช้งาน</a></li>' : ''}<li><a href="/account.html">บัญชีของฉัน</a></li>`;
       menu.querySelectorAll('a').forEach(a => a.classList.toggle('active', a.getAttribute('href') === location.pathname));
     }
     const link = document.getElementById('workspaceLink');
@@ -20,7 +20,7 @@
       brand.textContent = 'Clinic Flow';
       let role = document.querySelector('.sidebar-role');
       if (!role) { role = document.createElement('p'); role.className = 'sidebar-role'; brand.after(role); }
-      role.textContent = nurse ? 'พยาบาล' : 'แพทย์ / เจ้าของคลินิก';
+      role.textContent = {admin: 'เจ้าของคลินิก', doctor: 'แพทย์', nurse: 'พยาบาล'}[user.role] || '';
     }
   } catch (err) { console.error('โหลดสิทธิ์ไม่สำเร็จ', err); }
 })();

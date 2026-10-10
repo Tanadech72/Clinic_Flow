@@ -27,14 +27,15 @@ const connection = {
     return [{affectedRows: 1}];
   }
 };
+const roleById = {1: 'admin', 4: 'doctor', 5: 'nurse'};
 const dbPath = require.resolve('../config/db');
-require.cache[dbPath] = {id: dbPath, filename: dbPath, loaded: true, exports: {getConnection: async () => connection}};
+require.cache[dbPath] = {id: dbPath, filename: dbPath, loaded: true, exports: {getConnection: async () => connection, query: async (sql, values) => sql.includes('FROM users') ? [[{id: values[0], role: roleById[values[0]]}].filter(u => u.role)] : [[]]}};
 const app = express(); app.use(express.json()); app.use('/api/visits', require('../routes/visits'));
 const server = app.listen(0, '127.0.0.1');
 test.after(() => server.close());
 const request = async (path, role, body = {}) => {
   if (!server.listening) await new Promise(resolve => server.once('listening', resolve));
-  return fetch(`http://127.0.0.1:${server.address().port}/api/visits${path}`, {method:'POST', headers:{'Content-Type':'application/json', ...(role ? {Authorization: `Bearer ${jwt.sign({id: 4, role}, process.env.JWT_SECRET)}`} : {})}, body:JSON.stringify(body)});
+  return fetch(`http://127.0.0.1:${server.address().port}/api/visits${path}`, {method:'POST', headers:{'Content-Type':'application/json', ...(role ? {Authorization: `Bearer ${jwt.sign({id: {admin: 1, doctor: 4, nurse: 5}[role], role}, process.env.JWT_SECRET)}`} : {})}, body:JSON.stringify(body)});
 };
 test('role authorization, treatment handoff, stock deducted once, shortages roll back', async () => {
   const treatment = {diagnosis:'Test diagnosis', medicines:[{medicine_id:3, quantity:2, dosage_instructions:'After meals'}]};

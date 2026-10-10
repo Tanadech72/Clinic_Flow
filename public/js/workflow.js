@@ -210,8 +210,8 @@
       if (doctor !== (user.role !== 'nurse')) { location.replace(home); return; }
       filter = 'waiting';
       $('heading').textContent = doctor ? 'ห้องตรวจแพทย์' : 'เคาน์เตอร์พยาบาล';
-      $('subtitle').textContent = `${user.full_name || user.username} · ${doctor ? 'แพทย์ / เจ้าของคลินิก — ตรวจ วินิจฉัย และสั่งยา' : 'พยาบาล — บันทึกก่อนตรวจ และจ่ายยาตามคำสั่งแพทย์'}`;
-      $('navigation').innerHTML = `<strong>Clinic Flow</strong><p>${doctor ? 'แพทย์ / เจ้าของคลินิก' : 'พยาบาล'}</p><a class="active" href="${home}">${doctor ? 'ห้องตรวจ' : 'คิวตรวจและจ่ายยา'}</a><a href="/patients.html">ข้อมูลผู้ป่วย</a><a href="/records.html">ประวัติการรักษา</a><a href="/inventory.html">คลังยา</a>${doctor ? '<a href="/dashboard.html">ภาพรวมคลินิก</a><a href="/users.html">บัญชีผู้ใช้งาน</a>' : ''}`;
+      $('subtitle').textContent = `${user.full_name || user.username} · ${doctor ? `${user.role === 'admin' ? 'เจ้าของคลินิก' : 'แพทย์'} — ตรวจ วินิจฉัย และสั่งยา` : 'พยาบาล — บันทึกก่อนตรวจ และจ่ายยาตามคำสั่งแพทย์'}`;
+      $('navigation').innerHTML = `<strong>Clinic Flow</strong><p>${{admin: 'เจ้าของคลินิก', doctor: 'แพทย์', nurse: 'พยาบาล'}[user.role]}</p><a class="active" href="${home}">${doctor ? 'ห้องตรวจ' : 'คิวตรวจและจ่ายยา'}</a><a href="/patients.html">ข้อมูลผู้ป่วย</a><a href="/records.html">ประวัติการรักษา</a><a href="/inventory.html">คลังยา</a>${doctor ? '<a href="/dashboard.html">ภาพรวมคลินิก</a>' : ''}${user.role === 'admin' ? '<a href="/users.html">บัญชีผู้ใช้งาน</a>' : ''}<a href="/account.html">บัญชีของฉัน</a>`;
       await refresh();
     } catch (err) { notice(err); $('queue').innerHTML = ''; }
   })();

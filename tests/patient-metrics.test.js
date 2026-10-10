@@ -10,6 +10,7 @@ let transactionTail = Promise.resolve();
 const sample = {id: 1, date_of_birth:'2000-10-10', weight_kg:'70.00', height_cm:'175.00'};
 const dbPath = require.resolve('../config/db');
 const query = async (sql, values) => {
+  if (sql.includes('FROM users')) return [[{id:values[0], role:'nurse'}]]; // authenticate middleware
   queries.push({sql, values});
   if (sql.includes('COUNT(*)')) return [[{total:1}]];
   if (sql.includes('SELECT')) return [[sample]];

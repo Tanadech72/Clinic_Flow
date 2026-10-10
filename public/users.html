@@ -9,35 +9,82 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap">
-  <link rel="stylesheet" href="/css/theme.css?v=1">
+  <link rel="stylesheet" href="/css/theme.css?v=2">
+  <link rel="stylesheet" href="/css/pages/users.css">
 </head>
 <body>
-  <nav aria-label="เมนูหลัก"><strong>Clinic Flow</strong><p>แพทย์ / เจ้าของคลินิก</p>
+  <nav aria-label="เมนูหลัก"><strong>Clinic Flow</strong><p>เจ้าของคลินิก</p>
     <a href="/doctor.html">ห้องตรวจแพทย์</a><a href="/patients.html">ข้อมูลผู้ป่วย</a>
     <a href="/records.html">ประวัติการรักษา</a><a href="/inventory.html">คลังยา</a>
     <a href="/dashboard.html">ภาพรวมคลินิก</a><a class="active" href="/users.html">บัญชีผู้ใช้งาน</a>
+    <a href="/account.html">บัญชีของฉัน</a>
   </nav>
   <main>
-    <header><div><div class="page-eyebrow">Clinic team</div><h1>บัญชีผู้ใช้งาน</h1><p class="muted">เพิ่มสมาชิกทีม และกำหนดหน้าที่ในการดูแลผู้ป่วย</p></div><a class="button secondary" href="/doctor.html">กลับห้องตรวจ</a></header>
+    <header><div><div class="page-eyebrow">Clinic team</div><h1>บัญชีผู้ใช้งาน</h1><p class="muted">เพิ่มสมาชิกทีม แก้ไขบทบาท รีเซ็ตรหัสผ่าน และปิดบัญชีของผู้ที่ไม่ได้ทำงานแล้ว</p></div><a class="button secondary" href="/doctor.html">กลับห้องตรวจ</a></header>
     <div class="user-layout">
       <form class="card user-form" id="userForm">
         <h2>สร้างบัญชีใหม่</h2><p class="form-description">กรอกข้อมูลผู้ใช้งาน แล้วเลือกหน้าที่ให้เหมาะกับการทำงาน</p>
         <div class="account-fields">
           <div class="field-full"><label for="fullName">ชื่อแสดงผล *</label><input id="fullName" autocomplete="name" placeholder="เช่น Warin หรือชื่อ-นามสกุล" required><span class="field-help">ชื่อที่แสดงในระบบและบันทึกการทำงาน</span></div>
           <div><label for="username">ชื่อบัญชีเข้าสู่ระบบ *</label><input id="username" autocomplete="off" placeholder="เช่น warin" required><span class="field-help">ใช้ชื่อนี้กรอกในหน้าเข้าสู่ระบบ</span></div>
-          <div><label for="password">รหัสผ่าน *</label><div class="password-wrap"><input id="password" type="password" autocomplete="new-password" placeholder="กำหนดรหัสผ่าน" required><button type="button" id="togglePassword" aria-pressed="false" aria-label="แสดงหรือซ่อนรหัสผ่าน">แสดง</button></div></div>
-          <div class="field-full"><label for="role">หน้าที่ในคลินิก *</label><select id="role"><option value="nurse">พยาบาล — บันทึกข้อมูลและจ่ายยา</option><option value="doctor">หมอ / เจ้าของคลินิก — ตรวจรักษาและสั่งยา</option></select><span class="field-help">ระบบจะเปิดหน้าทำงานตามหน้าที่เมื่อเข้าสู่ระบบ</span></div>
+          <div><label for="password">รหัสผ่าน *</label><div class="password-wrap"><input id="password" type="password" autocomplete="new-password" placeholder="อย่างน้อย 6 ตัวอักษร" minlength="6" required><button type="button" id="togglePassword" aria-pressed="false" aria-label="แสดงหรือซ่อนรหัสผ่าน">แสดง</button></div></div>
+          <div class="field-full"><label for="role">หน้าที่ในคลินิก *</label><select id="role"><option value="nurse">พยาบาล — บันทึกข้อมูลและจ่ายยา</option><option value="doctor">แพทย์ — ตรวจรักษาและสั่งยา</option></select><span class="field-help">ระบบจะเปิดหน้าทำงานตามหน้าที่เมื่อเข้าสู่ระบบ</span></div>
         </div>
         <div class="actions"><button type="reset" class="secondary">ล้างข้อมูล</button><button type="submit">+ สร้างบัญชี</button></div>
         <p id="message" role="status" aria-live="polite"></p>
       </form>
       <aside class="card role-guide" aria-label="คำอธิบายหน้าที่">
-        <h2>สองหน้าที่ หนึ่งทีมดูแล</h2>
-        <div class="role-description"><h3><span class="role-number">01</span>หมอ / เจ้าของคลินิก</h3><p>ตรวจผู้ป่วย วินิจฉัย บันทึกการรักษา และสั่งยา พร้อมดูภาพรวมคลินิกและสร้างบัญชีให้ทีม</p></div>
-        <div class="role-description"><h3><span class="role-number">02</span>พยาบาล</h3><p>ลงทะเบียนผู้ป่วย บันทึกอาการและสัญญาณชีพ ส่งเข้าคิวตรวจ และจ่ายยาตามคำสั่งหลังหมอตรวจเสร็จ</p></div>
-        <p class="guide-note">หลังสร้างบัญชี ส่งชื่อบัญชีและรหัสผ่านให้สมาชิกทีมเพื่อเข้าสู่ระบบด้วยบัญชีของตัวเอง</p>
+        <h2>หน้าที่ในทีม</h2>
+        <div class="role-description"><h3><span class="role-number">01</span>แพทย์</h3><p>ตรวจผู้ป่วย วินิจฉัย บันทึกการรักษา และสั่งยา พร้อมดูภาพรวมคลินิก</p></div>
+        <div class="role-description"><h3><span class="role-number">02</span>พยาบาล</h3><p>ลงทะเบียนผู้ป่วย บันทึกอาการและสัญญาณชีพ ส่งเข้าคิวตรวจ และจ่ายยาตามคำสั่งหลังแพทย์ตรวจเสร็จ</p></div>
+        <p class="guide-note">บัญชีจะไม่ถูกลบออกจากระบบ เพื่อเก็บประวัติว่าใครเป็นผู้ตรวจ ผู้จ่ายยา และผู้ทำรายการสต๊อก ถ้าพนักงานลาออกให้ใช้ “ปิดบัญชี” แทน</p>
       </aside>
     </div>
+
+    <section class="card user-list" aria-labelledby="userListTitle">
+      <div class="user-list-head"><h2 id="userListTitle">สมาชิกในทีม</h2><span class="muted" id="userCount"></span></div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>ชื่อแสดงผล</th><th>ชื่อบัญชี</th><th>บทบาท</th><th>สถานะ</th><th>สร้างเมื่อ</th><th>จัดการ</th></tr></thead>
+          <tbody id="userRows"><tr><td colspan="6">กำลังโหลดรายชื่อ…</td></tr></tbody>
+        </table>
+      </div>
+      <p id="listMessage" role="status" aria-live="polite"></p>
+    </section>
   </main>
-  <script src="/js/users.js"></script><script src="/js/app-ui.js?v=2"></script>
+
+  <dialog id="editDialog" aria-labelledby="editTitle">
+    <form id="editForm">
+      <h2 id="editTitle">แก้ไขข้อมูลบัญชี</h2>
+      <p class="muted" id="editAccount"></p>
+      <label for="editFullName">ชื่อแสดงผล *</label><input id="editFullName" required>
+      <label for="editRole">บทบาท *</label>
+      <select id="editRole"><option value="nurse">พยาบาล</option><option value="doctor">แพทย์</option><option value="admin" disabled>เจ้าของคลินิก</option></select>
+      <span class="field-help" id="editRoleHelp"></span>
+      <p class="dialog-error" role="alert"></p>
+      <div class="actions"><button type="button" class="secondary" data-close>ยกเลิก</button><button type="submit">บันทึก</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="resetDialog" aria-labelledby="resetTitle">
+    <form id="resetForm">
+      <h2 id="resetTitle">ตั้งรหัสผ่านใหม่</h2>
+      <p class="muted" id="resetAccount"></p>
+      <label for="resetPassword">รหัสผ่านใหม่ *</label><input id="resetPassword" type="password" autocomplete="new-password" minlength="6" placeholder="อย่างน้อย 6 ตัวอักษร" required>
+      <span class="field-help">แจ้งรหัสผ่านใหม่ให้เจ้าของบัญชี แล้วให้เปลี่ยนเองที่หน้า “บัญชีของฉัน”</span>
+      <p class="dialog-error" role="alert"></p>
+      <div class="actions"><button type="button" class="secondary" data-close>ยกเลิก</button><button type="submit">ตั้งรหัสผ่านใหม่</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="statusDialog" aria-labelledby="statusTitle">
+    <form id="statusForm">
+      <h2 id="statusTitle"></h2>
+      <p id="statusText"></p>
+      <p class="dialog-error" role="alert"></p>
+      <div class="actions"><button type="button" class="secondary" data-close>ยกเลิก</button><button type="submit" id="statusSubmit"></button></div>
+    </form>
+  </dialog>
+
+  <script src="/js/users.js?v=2"></script><script src="/js/app-ui.js?v=2"></script>
 </body></html>

@@ -1,5 +1,5 @@
 (() => {
-  const icons = {'doctor.html':'✚','nurse.html':'✚','patients.html':'♧','records.html':'▤','inventory.html':'▦','dashboard.html':'◫','users.html':'♙'};
+  const icons = {'doctor.html':'✚','nurse.html':'✚','patients.html':'♧','records.html':'▤','inventory.html':'▦','dashboard.html':'◫','users.html':'♙','account.html':'◉'};
   const sidebar = document.querySelector('body > nav, .sidebar');
   function decorate() {
     if (!sidebar) return;

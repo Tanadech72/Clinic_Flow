@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Clinic Flow | บัญชีของฉัน</title>
+
+  <link rel="stylesheet" href="/css/workflow.css">
+  <link rel="stylesheet" href="/css/app-ui.css?v=2">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="/css/theme.css?v=2">
+  <link rel="stylesheet" href="/css/pages/users.css">
+</head>
+<body>
+  <nav aria-label="เมนูหลัก" id="navigation"><strong>Clinic Flow</strong><p id="navRole"></p></nav>
+  <main>
+    <header><div><div class="page-eyebrow">My account</div><h1>บัญชีของฉัน</h1><p class="muted">ดูข้อมูลบัญชี และเปลี่ยนรหัสผ่านสำหรับเข้าสู่ระบบ</p></div><button class="secondary" id="logout">ออกจากระบบ</button></header>
+    <div class="account-layout">
+      <section class="card profile-card" aria-labelledby="profileTitle">
+        <h2 id="profileTitle">ข้อมูลบัญชี</h2>
+        <dl>
+          <dt>ชื่อแสดงผล</dt><dd id="profileName">–</dd>
+          <dt>ชื่อบัญชี</dt><dd id="profileUsername">–</dd>
+          <dt>บทบาท</dt><dd id="profileRole">–</dd>
+        </dl>
+        <p class="field-help">ถ้าต้องการแก้ชื่อหรือบทบาท กรุณาติดต่อเจ้าของคลินิก</p>
+      </section>
+      <form class="card user-form password-form" id="passwordForm">
+        <h2>เปลี่ยนรหัสผ่าน</h2><p class="form-description">รหัสผ่านใหม่ต้องมีอย่างน้อย 6 ตัวอักษร และไม่ซ้ำกับรหัสผ่านเดิม</p>
+        <div class="account-fields">
+          <div><label for="currentPassword">รหัสผ่านปัจจุบัน *</label><input id="currentPassword" type="password" autocomplete="current-password" required></div>
+          <div><label for="newPassword">รหัสผ่านใหม่ *</label><input id="newPassword" type="password" autocomplete="new-password" minlength="6" required></div>
+          <div><label for="confirmPassword">ยืนยันรหัสผ่านใหม่ *</label><input id="confirmPassword" type="password" autocomplete="new-password" minlength="6" required></div>
+        </div>
+        <div class="actions"><button type="reset" class="secondary">ล้างข้อมูล</button><button type="submit">เปลี่ยนรหัสผ่าน</button></div>
+        <p id="message" role="status" aria-live="polite"></p>
+      </form>
+    </div>
+  </main>
+  <script src="/js/account.js"></script><script src="/js/app-ui.js?v=2"></script>
+</body></html>
