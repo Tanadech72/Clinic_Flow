@@ -24,7 +24,7 @@ router.get('/patient/:patientId', authenticate, async (req, res) => {
     // ดึงรายการยาที่สั่งในการรักษาแต่ละครั้งมาแนบไว้
     for (const record of records) {
       const [meds] = await pool.query(
-        `SELECT p.quantity, p.dosage_instructions, m.name AS medicine_name, m.unit
+        `SELECT p.medicine_id, p.quantity, p.dosage_instructions, p.unit_price, m.name AS medicine_name, m.unit
          FROM prescriptions p
          JOIN medicines m ON p.medicine_id = m.id
          WHERE p.medical_record_id = ?`,

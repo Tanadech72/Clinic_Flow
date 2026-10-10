@@ -253,18 +253,26 @@
       <div class="symptom"><small>อาการสำคัญ</small><p>${escape(v.symptoms || '-')}</p></div>
       ${v.status === 'cancelled' ? `<p class="cancel-note"><b>ยกเลิกคิว</b> · ${escape(v.cancel_reason || '-')}<br><small>โดย ${escape(v.cancelled_by_name || '-')} เวลา ${clock(v.cancelled_at)}</small></p>` : ''}
       ${vitalChips(vs)}
-      ${v.diagnosis ? `<div class="order"><p><small>การวินิจฉัย</small>${escape(v.diagnosis)}</p>${hasText(v.treatment_notes) ? `<p><small>คำสั่งแพทย์</small>${escape(v.treatment_notes)}</p>` : ''}<p class="muted">แพทย์: ${escape(v.doctor_name || '-')} · ยา ${v.prescriptions.length} รายการ</p>${overrideNote(v.allergy_override)}${prescriptions(v.prescriptions, v.allergies)}</div>` : ''}
+      ${v.diagnosis ? `<div class="order"><p><small>การวินิจฉัย</small>${escape(v.diagnosis)}</p>${hasText(v.treatment_notes) ? `<p><small>คำสั่งแพทย์</small>${escape(v.treatment_notes)}</p>` : ''}<p class="muted">แพทย์: ${escape(v.doctor_name || '-')} · ยา ${v.prescriptions.length} รายการ</p>${overrideNote(v.allergy_override)}${prescriptions(v.prescriptions, v.allergies, v.status === 'completed')}</div>` : ''}
       <footer class="visit-actions">${cancellable ? `<button class="secondary cancel-visit" data-cancel="${v.id}">ยกเลิกคิว</button>` : ''}<button class="secondary" data-history="${v.patient_id}">ดูประวัติ</button>${action}</footer>
     </article>`;
   }
   // ตารางรายการยา ถ้าส่งประวัติแพ้มาด้วยจะไฮไลต์แถวยาที่แพ้
-  function prescriptions(items, allergies) {
+  // แสดงจำนวนเงินแบบบาท ทศนิยม 2 ตำแหน่ง เช่น ฿1,250.00
+  const baht = value => `฿${Number(value || 0).toLocaleString('th-TH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+  // withPrice = true: เพิ่มคอลัมน์ราคาและยอดรวมค่ายาโดยประมาณ (ใช้ในหน้าต่างจ่ายยา เป็นการแสดงผลเท่านั้น ไม่ใช่ใบเสร็จ)
+  // ถ้าจ่ายยาแล้วจะใช้ราคาที่บันทึกไว้ตอนจ่าย (unit_price) ถ้ายังไม่จ่ายใช้ราคาปัจจุบันเป็นราคาโดยประมาณ
+  function prescriptions(items, allergies, withPrice = false) {
     if (!items.length) return '<p class="muted">ไม่มีรายการยา</p>';
-    const catalog = items.map(p => ({...p, id: p.medicine_id}));
-    return `<table><thead><tr><th>ยา</th><th>จำนวน</th><th>วิธีใช้</th></tr></thead><tbody>${catalog.map(p => {
+    const recorded = items.every(p => p.unit_price !== null && p.unit_price !== undefined);
+    const catalog = items.map(p => ({...p, id: p.medicine_id, price_per_unit: recorded ? p.unit_price : p.price_per_unit}));
+    const total = catalog.reduce((sum, p) => sum + Number(p.price_per_unit || 0) * Number(p.quantity || 0), 0);
+    const unpriced = catalog.some(p => !(Number(p.price_per_unit) > 0));
+    return `<table class="${withPrice ? 'rx-priced' : ''}"><thead><tr><th>ยา</th><th>จำนวน</th><th>วิธีใช้</th>${withPrice ? '<th class="num">ราคา/หน่วย</th><th class="num">รวม</th>' : ''}</tr></thead><tbody>${catalog.map(p => {
       const risk = allergies && AllergyCheck.check(allergies, p, catalog);
-      return `<tr class="${risk ? `allergy-hit ${risk.level}` : ''}"><td>${risk ? `<span class="rx-flag" title="${escape(risk.reason)}">⚠ แพ้</span> ` : ''}${escape(p.name || p.medicine_name)}</td><td>${escape(p.quantity)} ${escape(p.unit)}</td><td>${escape(p.dosage_instructions)}</td></tr>`;
-    }).join('')}</tbody></table>`;
+      const prices = withPrice ? `<td class="num">${baht(p.price_per_unit)}</td><td class="num">${baht(Number(p.price_per_unit || 0) * Number(p.quantity || 0))}</td>` : '';
+      return `<tr class="${risk ? `allergy-hit ${risk.level}` : ''}"><td>${risk ? `<span class="rx-flag" title="${escape(risk.reason)}">⚠ แพ้</span> ` : ''}${escape(p.name || p.medicine_name)}</td><td>${escape(p.quantity)} ${escape(p.unit)}</td><td>${escape(p.dosage_instructions)}</td>${prices}</tr>`;
+    }).join('')}</tbody>${withPrice ? `<tfoot><tr><td colspan="4">${recorded ? 'ค่ายา <small>(ราคา ณ เวลาที่จ่ายยา · ไม่รวมค่าตรวจและค่าบริการ)</small>' : 'ค่ายาโดยประมาณ <small>(ไม่รวมค่าตรวจและค่าบริการ · ไม่ใช่ใบเสร็จ)</small>'}${unpriced ? '<br><small class="price-warning">มียาที่ยังไม่ได้ตั้งราคา คิดเป็น ฿0.00</small>' : ''}</td><td class="num total">${baht(total)}</td></tr></tfoot>` : ''}</table>`;
   }
   // กล่องแสดงเหตุผลที่แพทย์ยืนยันสั่งยาที่ผู้ป่วยแพ้
   const overrideNote = reason => hasText(reason) ? `<p class="allergy-override-note"><b>⚠ แพทย์ยืนยันสั่งยาที่ผู้ป่วยมีประวัติแพ้</b><br>เหตุผล: ${escape(reason)}</p>` : '';
@@ -335,7 +343,7 @@
     // พยาบาลกด "จ่ายยา": แสดงรายการยาให้ตรวจสอบก่อนยืนยัน
     if (button.dataset.dispense) {
       selected = visits.find(v => v.id === Number(button.dataset.dispense)); $('dispenseForm').reset();
-      $('dispenseDetails').innerHTML = `${info(selected)}<p>การวินิจฉัย: ${escape(selected.diagnosis)}<br>คำสั่งแพทย์: ${escape(selected.treatment_notes || '-')}</p>${overrideNote(selected.allergy_override)}${prescriptions(selected.prescriptions, selected.allergies)}`;
+      $('dispenseDetails').innerHTML = `${info(selected)}<p>การวินิจฉัย: ${escape(selected.diagnosis)}<br>คำสั่งแพทย์: ${escape(selected.treatment_notes || '-')}</p>${overrideNote(selected.allergy_override)}${prescriptions(selected.prescriptions, selected.allergies, true)}`;
       $('dispenseSubmit').textContent = selected.prescriptions.length ? 'ยืนยันจ่ายยาและตัดสต๊อก' : 'ยืนยันปิดคิว';
       $('dispenseDialog').showModal();
     }
@@ -344,7 +352,7 @@
       $('historyDetails').textContent = 'กำลังโหลด…'; $('historyDialog').showModal();
       try {
         const result = await api(`/api/records/patient/${button.dataset.history}`);
-        $('historyDetails').innerHTML = result.data.length ? result.data.map(r => `<div class="card"><p>${escape(r.visit_date)} · ${escape(r.doctor_name)}<br>อาการ: ${escape(r.symptoms)}<br>การวินิจฉัย: ${escape(r.diagnosis)}<br>คำสั่ง: ${escape(r.treatment_notes)}</p>${overrideNote(r.allergy_override)}${bodyMeasurements(vitals(r))}${prescriptions(r.prescriptions || [])}</div>`).join('') : '<p>ยังไม่มีประวัติการรักษา</p>';
+        $('historyDetails').innerHTML = result.data.length ? result.data.map(r => `<div class="card"><p>${escape(r.visit_date)} · ${escape(r.doctor_name)}<br>อาการ: ${escape(r.symptoms)}<br>การวินิจฉัย: ${escape(r.diagnosis)}<br>คำสั่ง: ${escape(r.treatment_notes)}</p>${overrideNote(r.allergy_override)}${bodyMeasurements(vitals(r))}${prescriptions(r.prescriptions || [], null, (r.prescriptions || []).length > 0 && r.prescriptions.every(p => p.unit_price !== null))}</div>`).join('') : '<p>ยังไม่มีประวัติการรักษา</p>';
       } catch (err) { $('historyDetails').textContent = err.message; }
     }
   });

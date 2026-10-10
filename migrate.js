@@ -32,6 +32,9 @@ async function addColumnIfMissing(table, column, definition) {
     await addColumnIfMissing('clinic_visits', 'cancelled_by', "INT COMMENT 'ผู้ยกเลิกคิว (users.id)' AFTER dispensed_at");
     await addColumnIfMissing('clinic_visits', 'cancelled_at', 'DATETIME AFTER cancelled_by');
     await addColumnIfMissing('clinic_visits', 'cancel_reason', "VARCHAR(255) COMMENT 'เหตุผลที่ยกเลิกคิว' AFTER cancelled_at");
+    // บันทึกค่ายาตอนจ่ายยา
+    await addColumnIfMissing('prescriptions', 'unit_price', "DECIMAL(10,2) COMMENT 'ราคาต่อหน่วย ณ เวลาที่จ่ายยา' AFTER dosage_instructions");
+    await addColumnIfMissing('clinic_visits', 'medicine_total', "DECIMAL(10,2) COMMENT 'ค่ายารวม ณ เวลาที่จ่ายยา' AFTER cancel_reason");
     let filled = 0;
     // เติมชื่อสามัญและกลุ่มยาให้ยาเดิม จับคู่ด้วยรหัสยาหรือชื่อยา (ไม่ทับข้อมูลที่กรอกไว้แล้ว)
     for (const item of catalog) {

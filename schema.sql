@@ -100,6 +100,7 @@ CREATE TABLE IF NOT EXISTS prescriptions (
   medicine_id INT NOT NULL,
   quantity INT NOT NULL,
   dosage_instructions VARCHAR(255) COMMENT 'วิธีใช้ยา เช่น "1 เม็ด หลังอาหาร เช้า-เย็น"',
+  unit_price DECIMAL(10,2) COMMENT 'ราคาต่อหน่วย ณ เวลาที่จ่ายยา (NULL = ยังไม่จ่าย)',
   FOREIGN KEY (medical_record_id) REFERENCES medical_records(id) ON DELETE CASCADE,
   FOREIGN KEY (medicine_id) REFERENCES medicines(id)
 );
@@ -138,6 +139,7 @@ CREATE TABLE IF NOT EXISTS clinic_visits (
   cancelled_by INT COMMENT 'ผู้ยกเลิกคิว (users.id)',
   cancelled_at DATETIME,
   cancel_reason VARCHAR(255) COMMENT 'เหตุผลที่ยกเลิกคิว',
+  medicine_total DECIMAL(10,2) COMMENT 'ค่ายารวม ณ เวลาที่จ่ายยา',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (patient_id) REFERENCES patients(id),
   FOREIGN KEY (nurse_id) REFERENCES users(id),

@@ -200,3 +200,11 @@ body[data-workspace] .chip.active { background:var(--primary-tint); border-color
 body[data-workspace] button.danger { background:var(--danger); box-shadow:0 2px 6px #b4473a33; }
 body[data-workspace] button.danger:hover { background:#963a2f; }
 @media(max-width:760px) { .stat-tiles { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+
+/* ค่ายาโดยประมาณในหน้าต่างจ่ายยา */
+.rx-priced .num { text-align:right; white-space:nowrap; font-variant-numeric:tabular-nums; }
+.rx-priced tfoot td { background:var(--primary-tint); font-weight:600; border-bottom:0; }
+.rx-priced tfoot td small { font-weight:400; color:var(--muted); }
+.rx-priced tfoot .total { font-size:17px; color:var(--primary-dark); }
+.rx-priced .price-warning { color:#8a5a12; }
+.rx-priced tfoot td[colspan] { text-align:left; color:var(--ink); padding:14px 16px; }

@@ -41,7 +41,7 @@ router.get('/', async (req, res) => {
     for (const visit of rows) {
       visit.prescriptions = [];
       if (visit.medical_record_id) {
-        const [items] = await pool.query(`SELECT pr.*, m.name, m.generic_name, m.drug_group, m.unit, m.stock_quantity
+        const [items] = await pool.query(`SELECT pr.*, m.name, m.generic_name, m.drug_group, m.unit, m.stock_quantity, m.price_per_unit
           FROM prescriptions pr JOIN medicines m ON m.id = pr.medicine_id
           WHERE pr.medical_record_id = ? ORDER BY pr.medicine_id`, [visit.medical_record_id]);
         visit.prescriptions = items;
@@ -158,6 +158,7 @@ router.post('/:id/dispense', authorize('nurse'), async (req, res) => {
     if (visit.status !== 'ready') throw failure(409, 'คิวนี้ยังไม่พร้อมจ่ายยา หรือจ่ายยาแล้ว');
     // ดึงรายการยาที่ต้องจ่าย (เรียงตามรหัสยา เพื่อให้ล็อกแถวตามลำดับเดียวกันเสมอ ลดโอกาส deadlock)
     const [items] = await connection.query('SELECT * FROM prescriptions WHERE medical_record_id = ? ORDER BY medicine_id', [visit.medical_record_id]);
+    let medicineTotal = 0;
     for (const item of items) {
       // ล็อกแถวยาแล้วตรวจว่ายังใช้งานอยู่และสต๊อกพอ
       const [[medicine]] = await connection.query('SELECT * FROM medicines WHERE id = ? FOR UPDATE', [item.medicine_id]);
@@ -168,9 +169,14 @@ router.post('/:id/dispense', authorize('nurse'), async (req, res) => {
       await connection.query('UPDATE medicines SET stock_quantity = stock_quantity - ? WHERE id = ?', [item.quantity, item.medicine_id]);
       await connection.query(`INSERT INTO stock_transactions (medicine_id, change_type, quantity, reason, reference_id, created_by)
         VALUES (?, 'out', ?, ?, ?, ?)`, [item.medicine_id, -item.quantity, `จ่ายตามใบสั่งยา #${item.id}`, item.id, req.user.id]);
+      // บันทึกราคาต่อหน่วย ณ เวลาที่จ่าย ถ้าภายหลังเปลี่ยนราคายา ประวัติเดิมยังแสดงราคาที่จ่ายจริง
+      const unitPrice = Number(medicine.price_per_unit || 0);
+      await connection.query('UPDATE prescriptions SET unit_price = ? WHERE id = ?', [unitPrice, item.id]);
+      medicineTotal += unitPrice * item.quantity;
     }
-    // ปิดคิว พร้อมบันทึกผู้จ่ายยาและเวลา
-    await connection.query("UPDATE clinic_visits SET status = 'completed', dispensed_by = ?, dispensed_at = NOW() WHERE id = ?", [req.user.id, visit.id]);
+    // ปิดคิว พร้อมบันทึกผู้จ่ายยา เวลา และค่ายารวม (ปัดทศนิยม 2 ตำแหน่ง)
+    await connection.query("UPDATE clinic_visits SET status = 'completed', dispensed_by = ?, dispensed_at = NOW(), medicine_total = ? WHERE id = ?",
+      [req.user.id, Math.round(medicineTotal * 100) / 100, visit.id]);
     await connection.commit();
     res.json({ message: items.length ? 'ยืนยันจ่ายยาและตัดสต๊อกเรียบร้อย' : 'ปิดคิวเรียบร้อย (ไม่มีรายการยา)' });
   } catch (err) {

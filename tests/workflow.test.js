@@ -27,7 +27,7 @@ const connection = {
     if (sql.startsWith('SELECT allergies FROM patients')) return [[{allergies}]];
     if (sql.startsWith('SELECT id, name, generic_name')) return [[{id: 3, name: 'เทสตามอล 500 มก.', generic_name: 'testamol', drug_group: 'Tests'}, {id: 6, name: 'อีกตัว', generic_name: 'othermol', drug_group: 'Tests'}]];
     if (sql.startsWith('SELECT * FROM prescriptions')) return [[{id: 8, medicine_id: 3, quantity: 2}]];
-    if (sql.startsWith('SELECT * FROM medicines')) return [[{id: 3, name: 'Test', is_active: 1, stock_quantity: stock}]];
+    if (sql.startsWith('SELECT * FROM medicines')) return [[{id: 3, name: 'Test', is_active: 1, stock_quantity: stock, price_per_unit: '12.50'}]];
     if (sql.includes("SET status = 'ready'")) visit.status = 'ready';
     if (sql.includes("SET status = 'completed'")) visit.status = 'completed';
     if (sql.includes("SET status = 'cancelled'")) Object.assign(visit, {status: 'cancelled', cancelled_by: values[0], cancel_reason: values[1]});
@@ -71,6 +71,10 @@ test('role authorization, treatment handoff, stock deducted once, shortages roll
   stock = 10;
   assert.equal((await request('/1/dispense', 'nurse')).status, 200);
   assert.equal(stock, 8); assert.equal(visit.status, 'completed');
+  // บันทึกราคาต่อหน่วย ณ เวลาที่จ่าย และค่ายารวม (12.50 x 2 = 25)
+  const priced = queries.find(q => q.sql.startsWith('UPDATE prescriptions SET unit_price'));
+  assert.deepEqual(priced.values, [12.5, 8]);
+  assert.equal(queries.find(q => q.sql.includes("SET status = 'completed'")).values[1], 25);
   assert.equal((await request('/1/dispense', 'nurse')).status, 409);
   assert.equal(stock, 8); assert(rolledBack > 0);
 });

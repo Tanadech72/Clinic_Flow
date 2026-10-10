@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS clinic_visits (
   cancelled_by INT COMMENT 'ผู้ยกเลิกคิว (users.id)',
   cancelled_at DATETIME,
   cancel_reason VARCHAR(255) COMMENT 'เหตุผลที่ยกเลิกคิว',
+  medicine_total DECIMAL(10,2) COMMENT 'ค่ายารวม ณ เวลาที่จ่ายยา',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (patient_id) REFERENCES patients(id),
   FOREIGN KEY (nurse_id) REFERENCES users(id),
