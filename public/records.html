@@ -6,7 +6,7 @@
   <title>Clinic Flow | บันทึกการรักษา (OPD)</title>
 
   <link rel="stylesheet" href="/css/base.css">
-  <link rel="stylesheet" href="/css/pages/records.css">
+  <link rel="stylesheet" href="/css/pages/records.css?v=2">
   <link rel="stylesheet" href="/css/app-ui.css?v=2">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -33,9 +33,12 @@
 
     <div class="content-area">
       <div class="action-bar">
-        <div class="patient-select-group">
-          <label for="patientSelect"><strong>เลือกผู้ป่วย:</strong></label>
-          <select id="patientSelect" class="select-input" onchange="fetchPatientRecords()">
+        <div class="patient-select-group records-search">
+          <label for="patientSearch"><strong>ค้นหาผู้ป่วย:</strong></label>
+          <span id="patientCount" class="muted" role="status" aria-live="polite"></span>
+          <input type="search" id="patientSearch" class="search-input" autocomplete="off"
+            placeholder="ชื่อ นามสกุล HN หรือเลขบัตรประชาชน" oninput="searchPatients()">
+          <select id="patientSelect" class="select-input" aria-label="เลือกผู้ป่วย" onchange="fetchPatientRecords()">
             <option value="">-- กรุณาเลือกผู้ป่วยเพื่อดูประวัติ --</option>
           </select>
         </div>
@@ -63,21 +66,53 @@
       window.location.href = '/';
     });
 
-    async function loadMasterData() {
+    // แปลงอักขระพิเศษก่อนใส่ลง HTML กันการฝังโค้ดอันตราย (XSS) จากข้อมูลที่ผู้ใช้กรอก
+    const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+    // ลำดับการค้นหาล่าสุด ใช้ทิ้งผลค้นหาเก่าที่กลับมาช้ากว่าผลใหม่ (พิมพ์เร็ว ๆ)
+    let searchSerial = 0;
+    let searchTimer;
+
+    // ค้นหาผู้ป่วยจากเซิร์ฟเวอร์ (ค้นในชื่อ นามสกุล HN และเลขบัตรประชาชน) แล้วใส่ผลลงรายการเลือก
+    // ถ้าพบคนเดียว จะเลือกให้และแสดงประวัติทันที
+    async function loadPatients(search = '') {
+      const serial = ++searchSerial;
+      const pSelect = document.getElementById('patientSelect');
+      const previous = pSelect.value;
       try {
-        // ดึงข้อมูลผู้ป่วย
-        const pRes = await fetch('/api/patients?limit=1000', { headers: { 'Authorization': `Bearer ${token}` } });
+        const pRes = await fetch(`/api/patients?limit=1000&search=${encodeURIComponent(search)}`, { headers: { 'Authorization': `Bearer ${token}` } });
         const pData = await pRes.json();
+        if (serial !== searchSerial) return; // มีการค้นหาใหม่กว่าแล้ว
         patientsList = pData.data || [];
 
-        const pSelect = document.getElementById('patientSelect');
+        pSelect.innerHTML = `<option value="">${patientsList.length ? '-- เลือกผู้ป่วย --' : '-- ไม่พบผู้ป่วยที่ค้นหา --'}</option>` +
+          patientsList.map(p => `<option value="${p.id}">${escapeHtml(p.hn_code)} - ${escapeHtml(p.prefix || '')}${escapeHtml(p.first_name)} ${escapeHtml(p.last_name)}</option>`).join('');
+        document.getElementById('patientCount').textContent = search ? `พบ ${patientsList.length} ราย` : '';
 
-        
-        const optionsHtml = '<option value="">-- เลือกผู้ป่วย --</option>' + 
-          patientsList.map(p => `<option value="${p.id}">${p.hn_code} - ${p.prefix || ''}${p.first_name} ${p.last_name}</option>`).join('');
-        
-        pSelect.innerHTML = optionsHtml;
+        if (search && patientsList.length === 1) {
+          // พบคนเดียว -> เลือกให้เลย
+          pSelect.value = String(patientsList[0].id);
+        } else if (patientsList.some(p => String(p.id) === previous)) {
+          // ผู้ป่วยที่เลือกอยู่ยังอยู่ในผลค้นหา -> คงไว้
+          pSelect.value = previous;
+        }
+        // โหลดประวัติใหม่เฉพาะเมื่อผู้ป่วยที่เลือกเปลี่ยนไป
+        if (pSelect.value !== previous) fetchPatientRecords();
+      } catch (err) {
+        console.error('Error loading patients:', err);
+      }
+    }
 
+    // พิมพ์ในช่องค้นหา -> รอให้หยุดพิมพ์ 300 มิลลิวินาทีก่อนค้นหา ไม่ยิง API ทุกตัวอักษร
+    function searchPatients() {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => loadPatients(document.getElementById('patientSearch').value.trim()), 300);
+    }
+
+    async function loadMasterData() {
+      try {
+        // ดึงข้อมูลผู้ป่วยทั้งหมด (ยังไม่กรอง)
+        await loadPatients();
 
         // ดึงรายการยา
         const mRes = await fetch('/api/medicines', { headers: { 'Authorization': `Bearer ${token}` } });

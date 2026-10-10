@@ -7,6 +7,7 @@
   const $ = id => document.getElementById(id);
   // แปลงอักขระพิเศษก่อนใส่ลง HTML กันการฝังโค้ดอันตราย (XSS)
   const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  // token ที่ได้ตอนล็อกอิน ใช้แนบทุกครั้งที่เรียก API
   const token = localStorage.getItem('token');
   // สถานะของหน้า: ผู้ใช้, คิวทั้งหมด, รายการยา, คิวที่กำลังเปิดดู,
   // แท็บที่เลือกอยู่ และ busy (กันกดส่งฟอร์มซ้ำ)
@@ -17,13 +18,17 @@
   const labels = { waiting: 'รอตรวจ', ready: 'รอจ่ายยา', completed: 'เสร็จสิ้นวันนี้', cancelled: 'ยกเลิกวันนี้' };
   // เหตุผลยกเลิกคิวที่ใช้บ่อย (ปุ่มลัดในหน้าต่างยกเลิกคิว)
   const cancelReasons = ['ผู้ป่วยกลับก่อนตรวจ', 'ลงทะเบียนผิดหรือซ้ำ', 'ผู้ป่วยไม่รับยา', 'ส่งต่อโรงพยาบาล'];
+  // ชื่อผู้ป่วยแบบเต็มสำหรับแสดงผล เช่น "HN0001 · นายสมชาย ใจดี"
   const name = v => `${escape(v.hn_code)} · ${escape(v.prefix || '')}${escape(v.first_name)} ${escape(v.last_name)}`;
   // กล่องแสดงข้อมูลผู้ป่วยที่เลือกในหน้าต่าง "บันทึกก่อนตรวจ"
   const patientPanel = document.createElement('section');
   patientPanel.id = 'intakePatientDetails'; patientPanel.className = 'patient-summary';
   patientPanel.setAttribute('aria-live', 'polite');
   $('patient').after(patientPanel);
+  // patientDetailSerial = ลำดับการโหลดล่าสุด (กันผลเก่ามาทับ)
+  // intakePatientReady = โหลดข้อมูลผู้ป่วยที่เลือกเสร็จแล้ว จึงอนุญาตให้ส่งเข้าคิว
   let patientDetailSerial = 0, intakePatientReady = false;
+  // ล้างกล่องข้อมูลผู้ป่วย และยกเลิกผลการโหลดที่ค้างอยู่ (เพิ่ม serial)
   function clearPatientDetails() {
     patientDetailSerial++; intakePatientReady = false;
     patientPanel.innerHTML = '<p class="muted">เลือกผู้ป่วยเพื่อแสดงข้อมูลให้หมอประกอบการตรวจ</p>';
@@ -40,10 +45,12 @@
     const id = $('patient').value;
     clearPatientDetails();
     if (!id) return;
+    // จำลำดับของการโหลดครั้งนี้ไว้ เทียบตอนผลกลับมา
     const serial = patientDetailSerial;
     patientPanel.innerHTML = '<p class="muted">กำลังดึงข้อมูลผู้ป่วย…</p>';
     try {
       const result = await api(`/api/patients/${encodeURIComponent(id)}`);
+      // ผู้ใช้เปลี่ยนผู้ป่วยไปแล้วระหว่างรอ -> ทิ้งผลนี้
       if (serial !== patientDetailSerial || $('patient').value !== id) return;
       patientPanel.innerHTML = patientSummary(result.data); intakePatientReady = true;
     } catch (err) {
@@ -63,6 +70,7 @@
   const notice = error => { $('notice').textContent = error ? error.message : ''; };
   // อ่านสัญญาณชีพ (เก็บเป็น JSON) ให้เป็น object เสมอ แม้ข้อมูลเสีย
   const vitals = v => { try { return typeof v.vital_signs === 'string' ? JSON.parse(v.vital_signs) : v.vital_signs || {}; } catch { return {}; } };
+  // แถวแสดงน้ำหนัก ส่วนสูง และ BMI (คำนวณใหม่จากน้ำหนัก/ส่วนสูง)
   function bodyMeasurements(vs) {
     const bmi = PatientMetrics.bmi(vs.weight_kg, vs.height_cm);
     return `<div class="meta"><span>น้ำหนัก ${escape(vs.weight_kg ?? '-')} กก.</span><span>ส่วนสูง ${escape(vs.height_cm ?? '-')} ซม.</span><span>BMI ${bmi === null ? '-' : bmi.toFixed(1)}</span></div>`;
@@ -83,12 +91,14 @@
   medicineNotice.after(allergyPanel);
   // ตรวจว่าผู้ป่วยที่กำลังตรวจอาจแพ้ยาตัวนี้หรือไม่ (ดู allergy-check.js)
   const medicineRisk = medicine => selected && AllergyCheck.check(selected.allergies, medicine, medicines);
+  // ข้อความป้ายเตือนตามระดับความเสี่ยง
   const riskLabel = risk => risk.level === 'direct' ? '⚠ ผู้ป่วยแพ้ยานี้' : '⚠ กลุ่มเดียวกับยาที่แพ้';
   // ตรวจยาทุกแถวที่เลือกไว้ แล้วไฮไลต์แถวที่แพ้ (แดง = แพ้ตรงตัว, ส้ม = กลุ่มเดียวกัน)
   // ถ้ามียาที่แพ้ จะแสดงกล่องเตือนและบังคับให้กรอกเหตุผล
   function updateAllergyWarnings() {
     const found = [];
     $('medicineRows').querySelectorAll('.medicine-row').forEach(row => {
+      // หายาที่เลือกในแถวนี้ แล้วตรวจกับประวัติแพ้ยา
       const medicine = medicines.find(m => m.id === Number(row.querySelector('select').value));
       const result = medicineRisk(medicine);
       row.classList.toggle('allergy-direct', result?.level === 'direct');
@@ -98,6 +108,7 @@
       rowAlert.innerHTML = result ? `<b>${riskLabel(result)}</b> · ${escape(result.reason)}` : '';
       if (result) found.push(`<li class="${result.level}"><b>${escape(medicine.name)}</b> — ${escape(result.reason)}${result.level === 'group' ? ' (ยากลุ่มเดียวกัน)' : ''}</li>`);
     });
+    // มียาที่แพ้อย่างน้อย 1 ตัว -> แสดงกล่องเตือน และบังคับกรอกเหตุผล (ฟอร์มส่งไม่ได้ถ้าว่าง)
     allergyPanel.hidden = !found.length;
     allergyPanel.querySelector('ul').innerHTML = found.join('');
     $('allergyOverride').required = Boolean(found.length);
@@ -124,11 +135,14 @@
   // เรียง: ยาที่แพ้ตรงตัวขึ้นก่อน -> ยากลุ่มเดียวกัน -> ยาอื่นตามชื่อ เพื่อให้แพทย์เห็นคำเตือนก่อน
   function renderMedicineResults() {
     const list = $('medicineResults'), query = $('medicineSearch').value.trim().toLowerCase();
+    // ช่องค้นหาว่าง -> ซ่อนรายการผลค้นหา
     if (!query) { list.hidden = true; $('medicineSearch').setAttribute('aria-expanded', 'false'); return; }
     const chosen = chosenIds();
+    // คะแนนสำหรับเรียง: 0 = แพ้ตรงตัว, 1 = กลุ่มเดียวกัน, 2 = ไม่มีความเสี่ยง
     const rank = m => { const risk = medicineRisk(m); return risk ? (risk.level === 'direct' ? 0 : 1) : 2; };
     const found = medicines.filter(m => searchText(m).includes(query)).sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name, 'th')).slice(0, 8);
     list.innerHTML = found.length ? found.map(m => {
+      // taken = เลือกไว้แล้ว (ปุ่มกดไม่ได้), empty = ไม่มีสต๊อกที่จ่ายได้ (แสดงป้าย "สต๊อกหมด")
       const risk = medicineRisk(m), taken = chosen.has(m.id), empty = usableStock(m) <= 0;
       const details = [m.generic_name, m.drug_group, `คงเหลือ ${usableStock(m)} ${m.unit}`].filter(Boolean).map(escape).join(' · ');
       return `<li role="option" aria-selected="false"><button type="button" class="medicine-result${risk ? ` risk-${risk.level}` : ''}" data-pick="${m.id}" ${taken ? 'disabled' : ''}>
@@ -140,10 +154,12 @@
   }
   // เพิ่มแถวยาใหม่ในใบสั่งยา (มีช่องเลือกยา จำนวน วิธีใช้ และข้อความเตือนแพ้ยาของแถว)
   function addMedicineRow(medicineId) {
+    // เลือกยาครบทุกตัวในคลังแล้ว เพิ่มแถวไม่ได้อีก
     if ($('medicineRows').children.length >= medicines.length) return null;
     const row = document.createElement('div'); row.className = 'medicine-row';
     row.innerHTML = `<select aria-label="ยา" required><option value="">เลือกยา</option>${medicines.map(m => { const risk = medicineRisk(m); return `<option value="${m.id}"${risk ? ` class="opt-risk-${risk.level}"` : ''}>${risk ? '⚠ แพ้ · ' : ''}${escape(m.name)} · เหลือ ${usableStock(m)} ${escape(m.unit)}</option>`; }).join('')}</select><input type="number" aria-label="จำนวนยา" min="1" step="1" required placeholder="จำนวน"><input aria-label="วิธีใช้" required placeholder="วิธีใช้"><button type="button" class="secondary" data-remove>เอาออก</button><p class="row-alert" role="alert" hidden></p>`;
     $('medicineRows').append(row);
+    // ถ้าเพิ่มจากผลค้นหา ให้เลือกยานั้นไว้เลย แล้วอัปเดตตัวเลือกและคำเตือนแพ้ยา
     if (medicineId) row.querySelector('select').value = String(medicineId);
     syncMedicineChoices(); updateAllergyWarnings();
     return row;
@@ -153,9 +169,11 @@
     const existing = [...$('medicineRows').querySelectorAll('select')].find(select => Number(select.value) === id);
     const row = existing ? existing.parentElement : addMedicineRow(id);
     medicineNotice.textContent = existing ? 'ยานี้อยู่ในใบสั่งยาแล้ว ปรับจำนวนในรายการเดิมได้เลย' : '';
+    // ล้างคำค้น แล้วย้ายเคอร์เซอร์ไปช่องจำนวน ให้พิมพ์ต่อได้ทันที
     $('medicineSearch').value = ''; renderMedicineResults();
     if (row) row.querySelector('[type=number]').focus();
   }
+  // พิมพ์ในช่องค้นหา -> แสดงผลค้นหาใหม่ทันที
   $('medicineSearch').addEventListener('input', renderMedicineResults);
   // คีย์ลัดในช่องค้นหา: Enter เลือกผลแรก, ↓ ไปที่ผลค้นหา, Esc ล้างคำค้น
   $('medicineSearch').addEventListener('keydown', event => {
@@ -178,6 +196,7 @@
   picker.addEventListener('focusout', event => {
     if (!picker.contains(event.relatedTarget)) { $('medicineResults').hidden = true; $('medicineSearch').setAttribute('aria-expanded', 'false'); }
   });
+  // กลับมาที่ช่องค้นหา -> แสดงผลค้นหาเดิมอีกครั้ง
   $('medicineSearch').addEventListener('focus', renderMedicineResults);
   // หน้าต่างยืนยันยกเลิกคิว ต้องระบุเหตุผลทุกครั้ง
   const cancelDialog = document.createElement('dialog');
@@ -191,6 +210,7 @@
     const chosen = new Set(selects.map(select => select.value).filter(Boolean));
     selects.forEach(select => {
       [...select.options].forEach(option => {
+        // จำชื่อเดิมของตัวเลือกไว้ก่อน เพื่อเติม/ลบคำว่า "(เลือกแล้ว)" ได้ถูกต้อง
         if (!option.dataset.label) option.dataset.label = option.textContent;
         option.disabled = Boolean(option.value && option.value !== select.value && chosen.has(option.value));
         option.textContent = option.dataset.label + (option.disabled ? ' (เลือกแล้ว)' : '');
@@ -202,6 +222,7 @@
   $('medicineRows').addEventListener('change', event => {
     const select = event.target;
     if (select.tagName !== 'SELECT') return;
+    // ยาที่เลือกซ้ำกับแถวอื่นหรือไม่
     const duplicate = select.value && [...$('medicineRows').querySelectorAll('select')].some(other => other !== select && other.value === select.value);
     if (duplicate) {
       select.value = ''; medicineNotice.textContent = 'ยานี้ถูกเลือกแล้ว กรุณาปรับจำนวนในรายการเดิมหรือเลือกยาอื่น';
@@ -259,16 +280,20 @@
       <footer class="visit-actions">${cancellable ? `<button class="secondary cancel-visit" data-cancel="${v.id}">ยกเลิกคิว</button>` : ''}<button class="secondary" data-history="${v.patient_id}">ดูประวัติ</button>${action}</footer>
     </article>`;
   }
-  // ตารางรายการยา ถ้าส่งประวัติแพ้มาด้วยจะไฮไลต์แถวยาที่แพ้
   // แสดงจำนวนเงินแบบบาท ทศนิยม 2 ตำแหน่ง เช่น ฿1,250.00
   const baht = value => `฿${Number(value || 0).toLocaleString('th-TH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+  // ตารางรายการยา ถ้าส่งประวัติแพ้มาด้วยจะไฮไลต์แถวยาที่แพ้
   // withPrice = true: เพิ่มคอลัมน์ราคาและยอดรวมค่ายาโดยประมาณ (ใช้ในหน้าต่างจ่ายยา เป็นการแสดงผลเท่านั้น ไม่ใช่ใบเสร็จ)
   // ถ้าจ่ายยาแล้วจะใช้ราคาที่บันทึกไว้ตอนจ่าย (unit_price) ถ้ายังไม่จ่ายใช้ราคาปัจจุบันเป็นราคาโดยประมาณ
   function prescriptions(items, allergies, withPrice = false) {
     if (!items.length) return '<p class="muted">ไม่มีรายการยา</p>';
+    // recorded = ทุกรายการมีราคาที่บันทึกตอนจ่ายแล้ว (คิวที่จ่ายยาเสร็จ)
     const recorded = items.every(p => p.unit_price !== null && p.unit_price !== undefined);
+    // เลือกราคาที่จะใช้คำนวณ และเปลี่ยนชื่อช่องให้ AllergyCheck.check ใช้ได้ (ต้องมี id)
     const catalog = items.map(p => ({...p, id: p.medicine_id, price_per_unit: recorded ? p.unit_price : p.price_per_unit}));
+    // ยอดรวม = ผลรวมของ ราคา x จำนวน ทุกรายการ
     const total = catalog.reduce((sum, p) => sum + Number(p.price_per_unit || 0) * Number(p.quantity || 0), 0);
+    // มียาที่ยังไม่ได้ตั้งราคา (ราคา 0) -> แสดงหมายเหตุใต้ยอดรวม
     const unpriced = catalog.some(p => !(Number(p.price_per_unit) > 0));
     return `<table class="${withPrice ? 'rx-priced' : ''}"><thead><tr><th>ยา</th><th>จำนวน</th><th>วิธีใช้</th>${withPrice ? '<th class="num">ราคา/หน่วย</th><th class="num">รวม</th>' : ''}</tr></thead><tbody>${catalog.map(p => {
       const risk = allergies && AllergyCheck.check(allergies, p, catalog);
@@ -280,14 +305,17 @@
   const overrideNote = reason => hasText(reason) ? `<p class="allergy-override-note"><b>⚠ แพทย์ยืนยันสั่งยาที่ผู้ป่วยมีประวัติแพ้</b><br>เหตุผล: ${escape(reason)}</p>` : '';
   // วาดหน้าใหม่ทั้งหมด: ขั้นตอน 1-2-3, การ์ดสรุปจำนวนแต่ละสถานะ, ปุ่ม และรายการคิวของแท็บที่เลือก
   function render() {
+    // ขั้นตอนที่ไฮไลต์: 0 = บันทึกก่อนตรวจ, 1 = ตรวจรักษา, 2 = จ่ายยา, -1 = ไม่ไฮไลต์ (แท็บเสร็จสิ้น/ยกเลิก)
     const step = ['completed', 'cancelled'].includes(filter) ? -1 : filter === 'ready' ? 2 : doctor ? 1 : 0;
     document.querySelectorAll('.flow span').forEach((span, index) => {
       span.classList.toggle('current', index === step);
       if (index === step) span.setAttribute('aria-current', 'step');
       else span.removeAttribute('aria-current');
     });
+    // คำอธิบายใต้ตัวเลขของแต่ละแท็บ (ต่างกันระหว่างหน้าแพทย์กับพยาบาล)
     const hints = { waiting: doctor ? 'ผู้ป่วยที่พร้อมให้ตรวจ' : 'ส่งเข้าคิวแล้ว รอหมอตรวจ', ready: doctor ? 'ส่งต่อพยาบาลแล้ว' : 'หมอสั่งยาแล้ว รอจ่าย', completed: 'จ่ายยาและปิดคิวแล้ว', cancelled: 'ผู้ป่วยกลับหรือลงทะเบียนผิด' };
     $('filters').innerHTML = `<div class="stat-tiles" role="tablist" aria-label="สถานะคิว">${Object.keys(labels).map(s => `<button type="button" role="tab" aria-selected="${filter === s}" class="stat-tile tile-${s}${filter === s ? ' active' : ''}" data-filter="${s}"><span>${labels[s]}</span><b>${visits.filter(v => v.status === s).length}</b><small>${hints[s]}</small></button>`).join('')}</div><div class="toolbar-actions">${!doctor ? '<button id="newIntake">+ บันทึกก่อนตรวจ</button><a class="button secondary" href="/patients.html">ลงทะเบียนผู้ป่วยใหม่</a>' : ''}<span class="sync-status" id="syncStatus" role="status" aria-live="polite"></span><button class="secondary" id="refresh">↻ รีเฟรชคิว</button></div>`;
+    // เฉพาะคิวของแท็บที่เลือก
     const rows = visits.filter(v => v.status === filter);
     // คิวที่เสร็จสิ้นแล้ว เรียงจากที่จ่ายยาล่าสุดไว้บนสุด (คิวอื่นเรียงตามลำดับมาก่อน-หลังเหมือนเดิม)
     if (filter === 'completed') rows.sort((a, b) => new Date(b.dispensed_at) - new Date(a.dispensed_at));
@@ -299,7 +327,11 @@
   // ดึงคิวใหม่ทุก 15 วินาที วาดหน้าใหม่เฉพาะเมื่อข้อมูลเปลี่ยน (หน้าจอไม่กะพริบ)
   // หยุดเมื่อแท็บถูกซ่อน และไม่รีเฟรชระหว่างกำลังส่งฟอร์ม
   const AUTO_REFRESH_MS = 15000;
+  // lastSync = เวลาที่โหลดสำเร็จล่าสุด, syncFailed = รอบล่าสุดโหลดไม่สำเร็จ
+  // lastPayload = ข้อมูลรอบก่อน (ไว้เทียบว่าเปลี่ยนไหม), lastRenderMinute = นาทีที่วาดหน้าล่าสุด
+  // knownIds = id คิวที่เคยเห็นแล้ว, highlightIds = id คิวใหม่ที่ต้องไฮไลต์
   let lastSync = null, syncFailed = false, lastPayload = '', lastRenderMinute = -1, knownIds = null, highlightIds = new Set();
+  // ข้อความสถานะการอัปเดตมุมจอ เช่น "อัปเดตอัตโนมัติ · ล่าสุด 10:15:30"
   function updateSyncStatus() {
     const status = $('syncStatus');
     if (!status) return;
@@ -312,6 +344,7 @@
   async function refresh({background = false} = {}) {
     try {
       const data = (await api('/api/visits')).data;
+      // แปลงข้อมูลเป็นข้อความ ใช้เทียบกับรอบก่อนได้ง่าย
       const payload = JSON.stringify(data);
       // คิวที่เพิ่งปรากฏ (ไม่ใช่ตอนโหลดครั้งแรก) จะถูกไฮไลต์สั้น ๆ
       highlightIds = new Set(knownIds ? data.filter(v => !knownIds.has(v.id)).map(v => v.id) : []);
@@ -323,15 +356,18 @@
       visits = data; lastPayload = payload; lastRenderMinute = minute;
       render(); notice();
     } catch (err) {
+      // รีเฟรชอัตโนมัติล้มเหลว -> แจ้งที่มุมจอเฉย ๆ แล้วรอรอบถัดไป
       if (background) { syncFailed = true; updateSyncStatus(); return; }
       notice(err); $('queue').innerHTML = '<div class="card empty">โหลดคิวไม่สำเร็จ กรุณาลองรีเฟรช</div>';
     }
   }
+  // เริ่มตั้งเวลารีเฟรช: ข้ามรอบถ้าแท็บถูกซ่อน หรือกำลังส่งฟอร์มอยู่ (busy)
   function startAutoRefresh() {
     setInterval(() => { if (!document.hidden && !busy) refresh({background: true}); }, AUTO_REFRESH_MS);
     // กลับมาที่แท็บนี้ -> รีเฟรชทันที ไม่ต้องรอรอบถัดไป
     document.addEventListener('visibilitychange', () => { if (!document.hidden && !busy) refresh({background: true}); });
   }
+  // ลำดับการค้นหาผู้ป่วยล่าสุด
   let searchSerial = 0;
   // ค้นหาผู้ป่วยในหน้าต่างบันทึกก่อนตรวจ (ใช้ serial กันผลค้นหาเก่ามาทับผลใหม่)
   async function patients() {
@@ -340,6 +376,7 @@
     $('patient').innerHTML = '<option value="">กำลังค้นหาผู้ป่วย…</option>';
     try {
       const result = await api(`/api/patients?limit=100&search=${encodeURIComponent($('patientSearch').value)}`);
+      // มีการค้นหาใหม่กว่าเกิดขึ้นแล้ว -> ทิ้งผลนี้
       if (serial !== searchSerial) return;
       $('patient').innerHTML = '<option value="">เลือกผู้ป่วย</option>' + result.data.map(p => `<option value="${p.id}">${name(p)}</option>`).join('');
     } catch (err) { notice(err); }
@@ -349,9 +386,13 @@
   document.addEventListener('click', async event => {
     const button = event.target.closest('button');
     if (!button) return;
+    // ปุ่มปิดหน้าต่าง
     if (button.hasAttribute('data-close')) { button.closest('dialog').close(); return; }
+    // กดการ์ดสถานะ -> เปลี่ยนแท็บ
     if (button.dataset.filter) { filter = button.dataset.filter; render(); }
+    // ปุ่มรีเฟรช
     if (button.id === 'refresh') await refresh();
+    // พยาบาลกด "บันทึกก่อนตรวจ": สลับไปแท็บรอตรวจ เปิดหน้าต่าง แล้วโหลดรายชื่อผู้ป่วย
     if (button.id === 'newIntake') { filter = 'waiting'; render(); $('intakeForm').reset(); $('intakeDialog').showModal(); await patients(); }
     // แพทย์กด "ตรวจรักษา": โหลดรายการยาล่าสุด แล้วเปิดหน้าต่างตรวจรักษา
     if (button.dataset.treat) {
@@ -359,6 +400,7 @@
       $('treatmentForm').reset(); $('medicineRows').innerHTML = ''; medicineNotice.textContent = ''; $('treatmentPatient').innerHTML = info(selected);
       try { medicines = (await api('/api/medicines')).data; syncMedicineChoices(); updateAllergyWarnings(); renderAllergyBanner(); renderMedicineResults(); $('treatmentDialog').showModal(); } catch (err) { notice(err); }
     }
+    // ปุ่ม "+ เพิ่มยา" (เพิ่มแถวว่าง), เลือกยาจากผลค้นหา, และ "เอาออก" (ลบแถวยา)
     if (button.id === 'addMedicine') addMedicineRow();
     if (button.dataset.pick) pickMedicine(Number(button.dataset.pick));
     if (button.hasAttribute('data-remove')) { button.parentElement.remove(); medicineNotice.textContent = ''; syncMedicineChoices(); updateAllergyWarnings(); }
@@ -394,6 +436,8 @@
       } catch (err) { $('historyDetails').textContent = err.message; }
     }
   });
+  // หน้าต่างบันทึกก่อนตรวจ: พิมพ์ค้นหา -> ค้นผู้ป่วย, เลือกผู้ป่วย -> โหลดข้อมูล,
+  // กรอกน้ำหนัก/ส่วนสูง -> คำนวณ BMI, ล้างฟอร์ม -> ล้าง BMI และกล่องข้อมูลผู้ป่วย
   $('patientSearch').addEventListener('input', patients);
   $('patient').addEventListener('change', loadPatientDetails);
   ['intake_weight_kg', 'intake_height_cm'].forEach(id => $(id).addEventListener('input', updateIntakeBmi));
@@ -402,13 +446,16 @@
   // เรียก API แล้วปิดหน้าต่างและโหลดคิวใหม่ ถ้าผิดพลาดแสดงข้อความ
   async function submit(event, action) {
     event.preventDefault(); if (busy) return;
+    // บันทึกก่อนตรวจ: ต้องเลือกผู้ป่วยและโหลดข้อมูลเสร็จก่อน
     if (event.target.id === 'intakeForm' && !intakePatientReady) { alert('กรุณาเลือกผู้ป่วยและรอให้ข้อมูลแสดงครบก่อนส่งเข้าคิว'); return; }
+    // ตรวจรักษา: ห้ามมียาซ้ำในใบสั่งยา
     if (event.target.id === 'treatmentForm') {
       const ids = [...$('medicineRows').querySelectorAll('select')].map(select => select.value).filter(Boolean);
       if (new Set(ids).size !== ids.length) { medicineNotice.textContent = 'เลือกยาซ้ำ กรุณาปรับจำนวนในรายการเดิมหรือเลือกยาอื่น'; return; }
     }
     busy = true;
     const button = event.target.querySelector('[type=submit]'); button.disabled = true;
+    // สำเร็จ -> ปิดหน้าต่างแล้วโหลดคิวใหม่, ล้มเหลว -> แจ้งข้อความ, ไม่ว่าแบบไหนคืนสถานะปุ่ม
     try { await action(); event.target.closest('dialog').close(); await refresh(); }
     catch (err) { alert(err.message); }
     finally { busy = false; button.disabled = false; }
@@ -418,6 +465,7 @@
   $('treatmentForm').addEventListener('submit', e => submit(e, () => api(`/api/visits/${selected.id}/treatment`, 'POST', {diagnosis: $('diagnosis').value, treatment_notes: $('notes').value, medicines: [...document.querySelectorAll('.medicine-row')].map(row => ({medicine_id: Number(row.querySelector('select').value), quantity: Number(row.querySelector('[type=number]').value), dosage_instructions: row.querySelector('input:not([type=number])').value})), ...(allergyPanel.hidden ? {} : {allergy_override: $('allergyOverride').value})})));
   $('dispenseForm').addEventListener('submit', e => submit(e, () => api(`/api/visits/${selected.id}/dispense`, 'POST', {})));
   $('cancelForm').addEventListener('submit', e => submit(e, () => api(`/api/visits/${selected.id}/cancel`, 'POST', {reason: $('cancelReason').value})));
+  // ออกจากระบบ: ลบ token แล้วกลับหน้า login
   $('logout').onclick = () => { localStorage.clear(); location.href = '/'; };
   (async () => {
     // เริ่มต้นเมื่อเปิดหน้า: ตรวจการเข้าสู่ระบบและบทบาท
@@ -427,11 +475,13 @@
       user = (await api('/api/auth/me')).user;
       if (!['admin', 'doctor', 'nurse'].includes(user.role)) throw Error('บัญชีนี้ยังไม่ได้กำหนดสิทธิ์หมอหรือพยาบาล');
       const home = user.role === 'nurse' ? '/nurse.html' : '/doctor.html';
+      // หน้านี้เป็นหน้าแพทย์ แต่ผู้ใช้เป็นพยาบาล (หรือกลับกัน) -> ส่งไปหน้าที่ถูกต้อง
       if (doctor !== (user.role !== 'nurse')) { location.replace(home); return; }
       filter = 'waiting';
       $('heading').textContent = doctor ? 'ห้องตรวจแพทย์' : 'เคาน์เตอร์พยาบาล';
       $('subtitle').textContent = `${user.full_name || user.username} · ${doctor ? `${user.role === 'admin' ? 'เจ้าของคลินิก' : 'แพทย์'} — ตรวจ วินิจฉัย และสั่งยา` : 'พยาบาล — บันทึกก่อนตรวจ และจ่ายยาตามคำสั่งแพทย์'}`;
       $('navigation').innerHTML = `<strong>Clinic Flow</strong><p>${{admin: 'เจ้าของคลินิก', doctor: 'แพทย์', nurse: 'พยาบาล'}[user.role]}</p><a class="active" href="${home}">${doctor ? 'ห้องตรวจ' : 'คิวตรวจและจ่ายยา'}</a><a href="/patients.html">ข้อมูลผู้ป่วย</a><a href="/records.html">ประวัติการรักษา</a><a href="/inventory.html">คลังยา</a>${doctor ? '<a href="/dashboard.html">ภาพรวมคลินิก</a>' : ''}${user.role === 'admin' ? '<a href="/users.html">บัญชีผู้ใช้งาน</a>' : ''}<a href="/account.html">บัญชีของฉัน</a>`;
+      // โหลดคิวครั้งแรก แล้วเริ่มรีเฟรชอัตโนมัติ
       await refresh();
       startAutoRefresh();
     } catch (err) { notice(err); $('queue').innerHTML = ''; }

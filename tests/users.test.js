@@ -8,7 +8,6 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 process.env.JWT_SECRET = 'users-test-secret';
 
-// ฐานข้อมูลจำลองเฉพาะตาราง users
 // ฐานข้อมูลจำลองเฉพาะตาราง users: บัญชีเจ้าของคลินิก พยาบาล และแพทย์ รหัสผ่านเริ่มต้น secret1
 const hash = bcrypt.hashSync('secret1', 4);
 const users = [

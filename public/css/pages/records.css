@@ -45,3 +45,18 @@ body { margin: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
 .medicine-row .dosage-input { flex: 4; }
 
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+
+/* แถบค้นหาผู้ป่วย: แถวบน = หัวข้อ + จำนวนที่พบ, แถวล่าง = ช่องค้นหา + รายการเลือกผู้ป่วย */
+.action-bar .records-search { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 360px); gap: 8px 12px; align-items: center; flex: 1; }
+.action-bar .records-search .search-input,
+.action-bar .records-search .select-input { width: 100%; }
+.action-bar .records-search #patientCount { justify-self: end; font-size: 13px; }
+/* ปุ่มกลับหน้าทำงาน: ชิดล่างให้เสมอแถวช่องค้นหา */
+.action-bar .records-search + .btn { align-self: flex-end; }
+
+/* จอแคบ: เรียงทุกช่องเป็นแถวเดียวลงมา */
+@media (max-width: 760px) {
+  .action-bar .records-search { grid-template-columns: minmax(0, 1fr); flex-basis: 100%; }
+  .action-bar .records-search #patientCount { justify-self: start; }
+  .action-bar .records-search + .btn { width: 100%; text-align: center; }
+}

@@ -31,6 +31,7 @@ loginForm.addEventListener('submit', async (event) => {
 
     const data = await response.json();
 
+    // รหัสสถานะไม่ใช่ 2xx (เช่น 401 รหัสผิด) -> โยน error ไปแสดงใน catch
     if (!response.ok) {
       throw new Error(data.message || 'ชื่อผู้ใช้งานหรือรหัสผ่านไม่ถูกต้อง');
     }
@@ -38,6 +39,7 @@ loginForm.addEventListener('submit', async (event) => {
     // เก็บ token ไว้ในเบราว์เซอร์ หน้าอื่นจะใช้ token นี้เรียก API
     localStorage.setItem('token', data.token);
 
+    // เก็บข้อมูลผู้ใช้ (ชื่อ บทบาท) ไว้แสดงผลในหน้าอื่น
     if (data.user) {
       localStorage.setItem('user', JSON.stringify(data.user));
     }
@@ -45,13 +47,14 @@ loginForm.addEventListener('submit', async (event) => {
     message.textContent = 'เข้าสู่ระบบสำเร็จ';
     message.className = 'success';
 
-    // เมื่อสร้างหน้า dashboard แล้วจะเปลี่ยนไปยังหน้านั้น
+    // ไปหน้าทำงานตามบทบาท: พยาบาล -> หน้าคิวพยาบาล, แพทย์และเจ้าของคลินิก -> ห้องตรวจแพทย์
     window.location.href = data.user?.role === 'nurse' ? '/nurse.html' : '/doctor.html';
   } catch (error) {
+    // แสดงข้อความ error สีแดงใต้ฟอร์ม
     message.textContent = error.message;
     message.className = 'error';
-  // คืนสถานะปุ่มเสมอ ไม่ว่าสำเร็จหรือไม่
   } finally {
+    // คืนสถานะปุ่มเสมอ ไม่ว่าสำเร็จหรือไม่
     submitButton.disabled = false;
     submitButton.textContent = 'เข้าสู่ระบบ';
   }

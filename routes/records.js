@@ -20,8 +20,8 @@ router.get('/patient/:patientId', authenticate, async (req, res) => {
       [req.params.patientId]
     );
 
-    // ดึงรายการยาที่จ่ายในแต่ละครั้ง
-    // ดึงรายการยาที่สั่งในการรักษาแต่ละครั้งมาแนบไว้
+    // ดึงรายการยาที่สั่งในการรักษาแต่ละครั้งมาแนบไว้ใน record.prescriptions
+    // unit_price มีค่าเมื่อจ่ายยาแล้ว (ราคา ณ วันที่จ่าย) ถ้ายังไม่จ่ายจะเป็น NULL
     for (const record of records) {
       const [meds] = await pool.query(
         `SELECT p.medicine_id, p.quantity, p.dosage_instructions, p.unit_price, m.name AS medicine_name, m.unit
@@ -39,5 +39,5 @@ router.get('/patient/:patientId', authenticate, async (req, res) => {
   }
 });
 
-// Treatment uses /api/visits/:id/treatment.
+// ไม่มี POST ในไฟล์นี้: การบันทึกการรักษาใช้ /api/visits/:id/treatment เท่านั้น
 module.exports = router;

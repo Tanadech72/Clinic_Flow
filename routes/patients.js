@@ -89,7 +89,7 @@ router.post('/', authenticate, authorize('admin', 'doctor', 'nurse'), validateMe
     // สร้างเลข HN อัตโนมัติใน transaction เพื่อไม่ให้ลงทะเบียนพร้อมกันแล้วได้เลขซ้ำ
     connection = await pool.getConnection();
     await connection.beginTransaction();
-    // All registrations serialize on this row, including simultaneous first registrations.
+    // การลงทะเบียนทุกครั้งต้องผ่านแถวนี้ทีละคน (แม้แต่การลงทะเบียนครั้งแรกที่เกิดพร้อมกัน)
     // สร้างแถวเก็บลำดับเลข HN ถ้ายังไม่มี (ครั้งแรกของระบบ)
     await connection.query('INSERT IGNORE INTO patient_hn_sequence (id, last_number) VALUES (1, 0)');
     // ล็อกแถวลำดับเลข (FOR UPDATE) คนอื่นที่ลงทะเบียนพร้อมกันต้องรอจนกว่าจะ commit
@@ -97,12 +97,16 @@ router.post('/', authenticate, authorize('admin', 'doctor', 'nurse'), validateMe
     // หาเลข HN สูงสุดที่มีอยู่จริง กันกรณีมีข้อมูลเก่าที่เลขสูงกว่าลำดับที่เก็บไว้
     const [[existing]] = await connection.query(`SELECT COALESCE(MAX(CAST(SUBSTRING(hn_code, 3) AS UNSIGNED)), 0) AS highest
       FROM patients WHERE hn_code REGEXP '^HN[0-9]+$'`);
+    // เลขถัดไป = ค่าที่มากกว่าระหว่างลำดับที่เก็บไว้กับ HN สูงสุดที่มีจริง แล้วบวก 1
     const nextNumber = Math.max(Number(sequence.last_number), Number(existing.highest)) + 1;
+    // กันเลขเกินขอบเขตที่ JavaScript เก็บได้แม่นยำ (ไม่น่าเกิดในการใช้งานจริง)
     if (!Number.isSafeInteger(nextNumber)) throw new Error('HN sequence exceeds supported range');
     // จัดรูปแบบเป็น HN0001, HN0002, ...
     const hn_code = `HN${String(nextNumber).padStart(4, '0')}`;
+    // บันทึกเลขล่าสุดกลับไป ให้คนถัดไปได้เลขต่อจากนี้
     await connection.query('UPDATE patient_hn_sequence SET last_number = ? WHERE id = 1', [nextNumber]);
 
+    // บันทึกผู้ป่วยใหม่ ช่องที่ไม่กรอกเก็บเป็น NULL
     const [result] = await connection.query(
       `INSERT INTO patients
         (hn_code, national_id, prefix, first_name, last_name, gender, date_of_birth,
@@ -112,15 +116,17 @@ router.post('/', authenticate, authorize('admin', 'doctor', 'nurse'), validateMe
         phone || null, address || null, blood_type || null, allergies || null, underlying_conditions || null]
     );
 
+    // commit = ยืนยันทั้งเลข HN และข้อมูลผู้ป่วยพร้อมกัน และปลดล็อกให้คนถัดไป
     await connection.commit();
     res.status(201).json({ message: `เพิ่มข้อมูลผู้ป่วยสำเร็จ · รหัส HN: ${hn_code}`, patientId: result.insertId, hn_code });
   } catch (err) {
+    // เกิดข้อผิดพลาด -> ยกเลิกทุกอย่างใน transaction (เลข HN ไม่ถูกใช้ไป)
     if (connection) await connection.rollback();
     if (err.code === 'ER_DUP_ENTRY') {
       return res.status(409).json({ message: 'เลขบัตรประชาชนหรือรหัสผู้ป่วยนี้มีอยู่แล้วในระบบ' });
     }
     res.status(500).json({ message: 'เกิดข้อผิดพลาดในระบบ', error: err.message });
-  } finally { if (connection) connection.release(); }
+  } finally { if (connection) connection.release(); } // คืนการเชื่อมต่อให้ pool เสมอ ไม่ว่าสำเร็จหรือไม่
 });
 
 // PUT /api/patients/:id - แก้ไขข้อมูลผู้ป่วย
@@ -194,8 +200,10 @@ router.put(
         });
       }
 
+      // id ผู้ป่วยเป็นค่าสุดท้าย ตรงกับ ? ใน WHERE id = ?
       values.push(patientId);
 
+      // แก้ได้เฉพาะผู้ป่วยที่ยังใช้งานอยู่
       const [result] = await pool.query(
         `UPDATE patients
          SET ${updates.join(', ')}
@@ -203,6 +211,7 @@ router.put(
         values
       );
 
+      // ไม่มีแถวถูกแก้ = ไม่พบผู้ป่วย หรือผู้ป่วยถูกปิดการใช้งานแล้ว
       if (result.affectedRows === 0) {
         return res.status(404).json({
           message: 'ไม่พบข้อมูลผู้ป่วย'

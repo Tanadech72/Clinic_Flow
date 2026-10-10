@@ -1,6 +1,7 @@
 // สร้างเมนูด้านซ้ายตามบทบาทผู้ใช้ ใช้ในหน้าผู้ป่วย ประวัติการรักษา คลังยา และภาพรวมคลินิก
 
 (async () => {
+  // ไม่มี token = ยังไม่ล็อกอิน (แต่ละหน้าจัดการพากลับหน้า login เอง)
   const token = localStorage.getItem('token');
   if (!token) return;
   try {
@@ -17,8 +18,10 @@
     const menu = document.querySelector('.sidebar-menu');
     if (menu) {
       menu.innerHTML = `<li><a href="${home}">${nurse ? 'คิวตรวจและจ่ายยา' : 'ห้องตรวจแพทย์'}</a></li><li><a href="/patients.html">ข้อมูลผู้ป่วย</a></li><li><a href="/records.html">ประวัติการรักษา</a></li><li><a href="/inventory.html">คลังยา</a></li>${!nurse ? '<li><a href="/dashboard.html">ภาพรวมคลินิก</a></li>' : ''}${user.role === 'admin' ? '<li><a href="/users.html">บัญชีผู้ใช้งาน</a></li>' : ''}<li><a href="/account.html">บัญชีของฉัน</a></li>`;
+      // ไฮไลต์เมนูของหน้าที่เปิดอยู่
       menu.querySelectorAll('a').forEach(a => a.classList.toggle('active', a.getAttribute('href') === location.pathname));
     }
+    // ลิงก์ "กลับหน้าทำงาน" (ถ้าหน้านั้นมี) ให้ชี้ไปหน้าตามบทบาท
     const link = document.getElementById('workspaceLink');
     if (link) link.href = home;
     // แสดงชื่อบทบาทใต้ชื่อระบบในแถบเมนู

@@ -24,6 +24,7 @@ router.post('/login', async (req, res) => {
       [username]
     );
 
+    // ตอบข้อความเดียวกันทั้งกรณีไม่มี username และรหัสผ่านผิด เพื่อไม่ให้คนนอกเดาได้ว่ามี username นี้ในระบบ
     if (rows.length === 0) {
       return res.status(401).json({ message: 'username หรือ password ไม่ถูกต้อง' });
     }
@@ -58,8 +59,11 @@ router.post('/login', async (req, res) => {
 // จัดการบัญชีผู้ใช้งาน (เฉพาะเจ้าของคลินิก / admin)
 // ไม่มีการลบบัญชี ใช้การปิดการใช้งานแทน เพื่อคงประวัติผู้ปฏิบัติงานในเวชระเบียนและสต๊อกยา
 // ---------------------------------------------
+// ความยาวรหัสผ่านขั้นต่ำ
 const MIN_PASSWORD_LENGTH = 6;
+// บทบาทที่เจ้าของคลินิกสร้างหรือเปลี่ยนให้ได้ (สร้างบัญชี admin เพิ่มจากหน้าเว็บไม่ได้)
 const STAFF_ROLES = ['doctor', 'nurse'];
+// ตรวจว่าเป็นเลข id ที่ถูกต้อง (จำนวนเต็มบวก)
 const validId = value => Number.isSafeInteger(Number(value)) && Number(value) > 0;
 // คืนข้อความ error ถ้ารหัสผ่านสั้นเกินไป หรือ null ถ้าผ่าน
 const passwordError = password => (typeof password !== 'string' || password.length < MIN_PASSWORD_LENGTH)
@@ -74,6 +78,7 @@ async function findUser(id) {
 // GET /api/auth/users - รายชื่อบัญชีทั้งหมด
 router.get('/users', authenticate, authorize('admin'), async (req, res) => {
   try {
+    // เรียง: บัญชีที่เปิดใช้งานก่อน -> ตามบทบาท (เจ้าของ แพทย์ พยาบาล) -> ตามชื่อ
     const [rows] = await pool.query(
       `SELECT id, username, full_name, role, is_active, created_at, updated_at
        FROM users ORDER BY is_active DESC, FIELD(role, 'admin', 'doctor', 'nurse'), full_name`
@@ -100,6 +105,7 @@ router.post('/users', authenticate, authorize('admin'), async (req, res) => {
     const invalidPassword = passwordError(password);
     if (invalidPassword) return res.status(400).json({ message: invalidPassword });
 
+    // เข้ารหัสรหัสผ่านก่อนเก็บ (10 = จำนวนรอบการเข้ารหัส ยิ่งมากยิ่งเดายาก แต่ช้าลง)
     const passwordHash = await bcrypt.hash(password, 10);
 
     const [result] = await pool.query(
@@ -109,6 +115,7 @@ router.post('/users', authenticate, authorize('admin'), async (req, res) => {
 
     res.status(201).json({ message: 'สร้างผู้ใช้งานสำเร็จ', userId: result.insertId });
   } catch (err) {
+    // ER_DUP_ENTRY = MySQL ปฏิเสธเพราะ username ซ้ำ (คอลัมน์เป็น UNIQUE)
     if (err.code === 'ER_DUP_ENTRY') {
       return res.status(409).json({ message: 'username นี้มีอยู่แล้วในระบบ' });
     }
@@ -124,6 +131,7 @@ router.put('/users/:id', authenticate, authorize('admin'), async (req, res) => {
     if (!target) return res.status(404).json({ message: 'ไม่พบบัญชีผู้ใช้' });
 
     const full_name = String(req.body.full_name || '').trim();
+    // ถ้าไม่ได้ส่งบทบาทมา ใช้บทบาทเดิม
     const role = req.body.role || target.role;
     if (!full_name) return res.status(400).json({ message: 'กรุณากรอกชื่อแสดงผล' });
     if (role !== target.role) {
@@ -176,6 +184,7 @@ router.post('/users/:id/reset-password', authenticate, authorize('admin'), async
 });
 
 // GET /api/auth/me - ดูข้อมูลผู้ใช้ที่ login อยู่
+// หน้าเว็บใช้ตรวจบทบาทเพื่อซ่อน/แสดงเมนูและปุ่ม (req.user มาจาก middleware authenticate)
 router.get('/me', authenticate, (req, res) => {
   res.json({ user: req.user });
 });

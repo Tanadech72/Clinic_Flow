@@ -2,12 +2,16 @@
 
 (() => {
   const token = localStorage.getItem('token');
+  // ตัวย่อสำหรับหา element ด้วย id
   const $ = id => document.getElementById(id);
+  // ชื่อบทบาทภาษาไทยที่แสดงในหน้า
   const roleLabels = {admin: 'เจ้าของคลินิก', doctor: 'แพทย์', nurse: 'พยาบาล'};
   const message = $('message');
   // แสดงข้อความผลลัพธ์ใต้ฟอร์ม (สีเขียวเมื่อสำเร็จ สีแดงเมื่อผิดพลาด)
   const show = (state, text) => { message.dataset.state = state; message.textContent = text; };
 
+  // เรียก API พร้อมแนบ token และแปลงผลเป็น JSON
+  // token หมดอายุ/บัญชีถูกปิด (401) -> ล้างข้อมูลแล้วกลับหน้า login, error อื่น -> โยนข้อความจากเซิร์ฟเวอร์
   async function api(url, method = 'GET', body) {
     const res = await fetch(url, {method, headers: {Authorization: `Bearer ${token}`, 'Content-Type': 'application/json'}, ...(body ? {body: JSON.stringify(body)} : {})});
     const data = await res.json();
@@ -29,6 +33,7 @@
       $('profileUsername').textContent = user.username;
       $('profileRole').textContent = roleLabels[user.role] || user.role;
       $('navRole').textContent = roleLabels[user.role] || '';
+      // สร้างลิงก์เมนูตามบทบาท (พยาบาลไม่เห็นภาพรวม, เฉพาะเจ้าของเห็นบัญชีผู้ใช้งาน)
       $('navRole').insertAdjacentHTML('afterend',`<a href="${home}">${nurse ? 'คิวตรวจและจ่ายยา' : 'ห้องตรวจแพทย์'}</a><a href="/patients.html">ข้อมูลผู้ป่วย</a><a href="/records.html">ประวัติการรักษา</a><a href="/inventory.html">คลังยา</a>${nurse ? '' : '<a href="/dashboard.html">ภาพรวมคลินิก</a>'}${user.role === 'admin' ? '<a href="/users.html">บัญชีผู้ใช้งาน</a>' : ''}<a class="active" aria-current="page" href="/account.html">บัญชีของฉัน</a>`);
     } catch (err) { show('error', err.message); }
   })();
@@ -37,10 +42,12 @@
   $('passwordForm').addEventListener('submit', async event => {
     event.preventDefault();
     if ($('newPassword').value !== $('confirmPassword').value) { show('error', 'รหัสผ่านใหม่และการยืนยันไม่ตรงกัน'); return; }
+    // ปิดปุ่มระหว่างรอผล กันกดซ้ำ
     const button = event.target.querySelector('[type=submit]');
     button.disabled = true; message.textContent = '';
     try {
       const result = await api('/api/auth/me/password', 'PUT', {current_password: $('currentPassword').value, new_password: $('newPassword').value});
+      // สำเร็จ -> ล้างช่องรหัสผ่านทั้งหมด แล้วแสดงข้อความสีเขียว
       event.target.reset(); show('success', result.message);
     } catch (err) { show('error', err.message); }
     finally { button.disabled = false; }

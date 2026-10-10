@@ -1,7 +1,6 @@
 // สคริปต์ตั้งราคาขายตัวอย่างให้ยาเริ่มต้น
 // วิธีใช้: node set-medicine-prices.js
 
-// Example selling prices for the project, in THB per inventory unit.
 const pool = require('./config/db');
 // ราคาขายตัวอย่าง (บาทต่อหน่วย) จับคู่ด้วยรหัสยา
 const prices = {
@@ -13,8 +12,10 @@ const prices = {
 (async () => {
   let connection;
   try {
+    // อัปเดตทั้งหมดใน transaction เดียว ถ้าตัวใดล้มเหลวจะยกเลิกทั้งชุด
     connection = await pool.getConnection();
     await connection.beginTransaction();
+    // นับจำนวนยาที่ถูกตั้งราคาจริง
     let updated = 0;
     for (const [code, price] of Object.entries(prices)) {
       // อัปเดตเฉพาะยาที่ราคายังเป็น 0 เพื่อไม่ทับราคาที่ตั้งเองไว้แล้ว
