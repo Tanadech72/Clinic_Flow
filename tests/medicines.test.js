@@ -37,11 +37,18 @@ const connection = {
       lots.push({id: lots.length + 1, medicine_id, lot_number, expiry_date, quantity_received, quantity_remaining});
       return [{insertId: lots.length}];
     }
+    // ตัดยาหมดอายุ: หาล็อต, อ่านล็อตพร้อมสถานะหมดอายุ (เทียบกับวันนี้), ล้างยอดคงเหลือของล็อต
+    if (sql.startsWith('SELECT medicine_id FROM medicine_lots')) return [lots.filter(l => l.id === Number(values[0]))];
+    if (sql.startsWith('SELECT id, medicine_id, lot_number')) {
+      const today = new Date().toISOString().slice(0, 10);
+      return [lots.filter(l => l.id === Number(values[0])).map(l => ({...l, is_expired: l.expiry_date < today ? 1 : 0}))];
+    }
+    if (sql.startsWith('UPDATE medicine_lots SET quantity_remaining = 0')) { lots.find(l => l.id === values[0]).quantity_remaining = 0; return [{affectedRows: 1}]; }
     if (sql.startsWith('UPDATE medicine_lots')) {
       const lot = lots.find(l => l.id === values[2]);
       lot.quantity_received += values[0]; lot.quantity_remaining += values[1];
     }
-    if (sql.startsWith('UPDATE medicines SET stock_quantity')) stockById[values[1]] += values[0];
+    if (sql.startsWith('UPDATE medicines SET stock_quantity')) stockById[values[1]] += sql.includes('- ?') ? -values[0] : values[0];
     if (sql.startsWith('INSERT INTO stock_transactions')) transactions.push({medicine_id: values[0], quantity: values[1], reason: values[2], lot_id: values[3]});
     return [{affectedRows: 1}];
   },
@@ -61,6 +68,8 @@ async function call(method, path, userId, body) {
   });
   return res.status;
 }
+// POST /api/medicines/lots/:lotId/write-off
+const writeOff = (lotId, userId, body) => call('POST', `/lots/${lotId}/write-off`, userId, body);
 // PUT /api/medicines/:id
 const edit = (id, userId, body) => call('PUT', `/${id}`, userId, body);
 // POST /api/medicines/:id/stock-in
@@ -112,4 +121,30 @@ test('stock-in creates or tops up a lot and keeps the total stock and history in
   // ล็อตเดียวกันของยาต่างตัวเป็นคนละล็อต
   assert.equal(await stockIn(2, 2, {lot_number: 'A2410', expiry_date: '2097-01-01', quantity: 3}), 200);
   assert.equal(lots.length, 3); assert.equal(stockById[2], 3);
+});
+
+// ตัดยาหมดอายุได้เฉพาะเจ้าของคลินิก เฉพาะล็อตที่หมดอายุแล้ว ตัดทั้งล็อต และบันทึกประวัติแบบปรับยอด
+test('only the owner can write off an expired lot, once, with a recorded reason', async () => {
+  // เตรียมล็อตหมดอายุของยาตัวที่ 2 จำนวน 4 (เพิ่มตรงในฐานข้อมูลจำลอง เพราะ API ไม่รับยาหมดอายุเข้า)
+  lots.push({id: lots.length + 1, medicine_id: 2, lot_number: 'OLD1', expiry_date: '2000-01-01', quantity_received: 4, quantity_remaining: 4});
+  const expiredId = lots.length;
+  stockById[2] += 4;
+  const stockBefore = stockById[2], historyBefore = transactions.length;
+
+  assert.equal(await writeOff(expiredId, 2, {method: 'destroy'}), 403);
+  assert.equal(await writeOff(expiredId, 3, {method: 'destroy'}), 403);
+  assert.equal(await writeOff(expiredId, 1, {method: 'burn'}), 400);
+  assert.equal(await writeOff(expiredId, 1, {method: 'destroy', note: 'x'.repeat(151)}), 400);
+  assert.equal(await writeOff(999, 1, {method: 'destroy'}), 404);
+  // ล็อต A2410 ยังไม่หมดอายุ (2099) ตัดไม่ได้
+  assert.equal(await writeOff(1, 1, {method: 'destroy'}), 409);
+  assert.equal(stockById[2], stockBefore); assert.equal(transactions.length, historyBefore);
+
+  assert.equal(await writeOff(expiredId, 1, {method: 'return', note: ' ใบคืน #12 '}), 200);
+  assert.equal(lots[expiredId - 1].quantity_remaining, 0);
+  assert.equal(stockById[2], stockBefore - 4);
+  assert.deepEqual(transactions.at(-1), {medicine_id: 2, quantity: -4, reason: 'ตัดยาหมดอายุ (คืนผู้จำหน่าย) · ใบคืน #12', lot_id: expiredId});
+  // ตัดซ้ำไม่ได้ เพราะไม่มียาเหลือแล้ว
+  assert.equal(await writeOff(expiredId, 1, {method: 'destroy'}), 409);
+  assert.equal(stockById[2], stockBefore - 4);
 });

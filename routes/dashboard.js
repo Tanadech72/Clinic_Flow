@@ -19,26 +19,40 @@ router.get('/', authenticate, async (req, res) => {
       'SELECT COUNT(*) AS total FROM medical_records WHERE DATE(visit_date) = CURDATE()'
     );
 
-    // ยาที่คงเหลือน้อยกว่าหรือเท่ากับจุดสั่งซื้อ (10 รายการแรก เรียงจากเหลือน้อยสุด)
+    // ยาที่คงเหลือที่ใช้ได้ (ไม่นับล็อตที่หมดอายุ) น้อยกว่าหรือเท่ากับจุดสั่งซื้อ (10 รายการแรก เรียงจากเหลือน้อยสุด)
     const [lowStockMedicines] = await pool.query(
-      `SELECT id, code, name, stock_quantity, reorder_level
-       FROM medicines
-       WHERE is_active = TRUE AND stock_quantity <= reorder_level
+      `SELECT m.id, m.code, m.name, m.reorder_level,
+         m.stock_quantity - (SELECT COALESCE(SUM(l.quantity_remaining), 0) FROM medicine_lots l
+                             WHERE l.medicine_id = m.id AND l.expiry_date < CURDATE()) AS stock_quantity
+       FROM medicines m
+       WHERE m.is_active = TRUE
+       HAVING stock_quantity <= m.reorder_level
        ORDER BY stock_quantity ASC
        LIMIT 10`
     );
 
-    // ล็อตยาที่ยังมีของเหลือและจะหมดอายุภายใน 90 วัน (รวมที่หมดอายุไปแล้ว)
+    // ล็อตยาที่ยังมีของเหลือและจะหมดอายุภายใน 90 วัน (ยังไม่หมดอายุ)
     const [expiringSoon] = await pool.query(
       `SELECT l.id, m.code, m.name, l.lot_number, l.expiry_date, l.quantity_remaining AS stock_quantity
        FROM medicine_lots l
        JOIN medicines m ON m.id = l.medicine_id
        WHERE m.is_active = TRUE
          AND l.quantity_remaining > 0
-         AND l.expiry_date IS NOT NULL
+         AND l.expiry_date >= CURDATE()
          AND l.expiry_date <= DATE_ADD(CURDATE(), INTERVAL 90 DAY)
        ORDER BY l.expiry_date ASC
        LIMIT 10`
+    );
+
+    // ล็อตยาที่หมดอายุแล้วแต่ยังมียาค้างในสต๊อก รอเจ้าของคลินิกตัดออก (หน้าคลังยา -> ล็อต/ประวัติ)
+    const [expiredLots] = await pool.query(
+      `SELECT l.id, m.code, m.name, l.lot_number, l.expiry_date, l.quantity_remaining AS stock_quantity
+       FROM medicine_lots l
+       JOIN medicines m ON m.id = l.medicine_id
+       WHERE m.is_active = TRUE
+         AND l.quantity_remaining > 0
+         AND l.expiry_date < CURDATE()
+       ORDER BY l.expiry_date ASC`
     );
 
     // ประวัติการรักษาล่าสุด 10 รายการ
@@ -57,9 +71,11 @@ router.get('/', authenticate, async (req, res) => {
         visitsToday: visitsToday.total,
         lowStockCount: lowStockMedicines.length,
         expiringSoonCount: expiringSoon.length,
+        expiredLotCount: expiredLots.length,
       },
       lowStockMedicines,
       expiringSoon,
+      expiredLots,
       recentVisits,
     });
   } catch (err) {

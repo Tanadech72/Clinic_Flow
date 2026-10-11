@@ -178,10 +178,11 @@
               <th>วันหมดอายุ</th>
               <th>คงเหลือ / รับเข้า</th>
               <th>รับเข้าเมื่อ</th>
+              <th>จัดการ</th>
             </tr>
           </thead>
           <tbody id="tbLots">
-            <tr><td colspan="4">กำลังโหลดข้อมูล...</td></tr>
+            <tr><td colspan="5">กำลังโหลดข้อมูล...</td></tr>
           </tbody>
         </table>
       </div>
@@ -206,6 +207,33 @@
       <div class="modal-actions">
         <button type="button" class="btn" onclick="closeModal('historyModal')">ปิด</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Modal 4: ตัดยาหมดอายุออกจากสต๊อก (เฉพาะเจ้าของคลินิก) -->
+  <div class="modal" id="writeOffModal">
+    <div class="modal-content">
+      <h2>ตัดยาหมดอายุออกจากสต๊อก</h2>
+      <p id="writeOffLotInfo" style="font-weight:bold; color:#ef4444;"></p>
+      <form id="writeOffForm" onsubmit="saveWriteOff(event)">
+        <input type="hidden" id="write_off_lot_id">
+        <div class="form-group">
+          <label>วิธีจัดการ *</label>
+          <select id="write_off_method" required>
+            <option value="destroy">ทำลาย (ส่งหน่วยงานกำจัดขยะอันตราย)</option>
+            <option value="return">คืนผู้จำหน่าย</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>หมายเหตุ</label>
+          <input type="text" id="write_off_note" maxlength="150" placeholder="เช่น เลขที่ใบส่งคืน หรือวันที่ส่งทำลาย">
+        </div>
+        <p class="field-help">ยาที่เหลือทั้งล็อตจะถูกตัดออก ยอดคงเหลือลดลง และบันทึกในประวัติสต๊อกพร้อมชื่อผู้ตัด ย้อนกลับไม่ได้</p>
+        <div class="modal-actions">
+          <button type="button" class="btn" onclick="closeModal('writeOffModal')">ยกเลิก</button>
+          <button type="submit" class="btn btn-danger">ยืนยันตัดออก</button>
+        </div>
+      </form>
     </div>
   </div>
 
@@ -240,8 +268,9 @@
         }
 
         tbody.innerHTML = allMedicinesCache.map(m => {
-          const isLow = Number(m.stock_quantity) <= Number(m.reorder_level);
+          // ส่วนที่หมดอายุจ่ายไม่ได้ จึงไม่นับตอนเทียบกับจุดสั่งซื้อ
           const expired = Number(m.expired_quantity || 0);
+          const isLow = Number(m.stock_quantity) - expired <= Number(m.reorder_level);
           return `
             <tr>
               <td><strong>${m.code}</strong></td>
@@ -413,11 +442,54 @@
       }
     }
 
+    // ชื่อและสีของประเภทการเคลื่อนไหวสต๊อกในตารางประวัติ
+    const changeTypes = {
+      in: { label: 'รับเข้า (+)', color: '#10b981' },
+      out: { label: 'จ่ายออก (-)', color: '#ef4444' },
+      adjustment: { label: 'ตัดจำหน่าย (-)', color: '#f97316' }
+    };
+
+    // เปิดหน้าต่างตัดยาหมดอายุของล็อตที่เลือก
+    function openWriteOff(lotId, lotNumber, quantity) {
+      document.getElementById('writeOffForm').reset();
+      document.getElementById('write_off_lot_id').value = lotId;
+      document.getElementById('writeOffLotInfo').textContent = `ล็อต ${lotNumber} · ตัดออก ${quantity} หน่วย`;
+      document.getElementById('writeOffModal').style.display = 'flex';
+    }
+
+    // ส่งคำสั่งตัดยาหมดอายุ แล้วโหลดล็อต/ประวัติ และตารางยาใหม่
+    async function saveWriteOff(e) {
+      e.preventDefault();
+      const lotId = document.getElementById('write_off_lot_id').value;
+      try {
+        const res = await fetch(`/api/medicines/lots/${lotId}/write-off`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({
+            method: document.getElementById('write_off_method').value,
+            note: document.getElementById('write_off_note').value
+          })
+        });
+        const data = await res.json();
+        alert(data.message || 'เกิดข้อผิดพลาด');
+        if (!res.ok) return;
+        closeModal('writeOffModal');
+        viewHistory(historyMedicineId);
+        fetchMedicines();
+      } catch (err) {
+        alert('เกิดข้อผิดพลาดในการเชื่อมต่อ');
+      }
+    }
+
+    // ยาที่เปิดดูล็อต/ประวัติอยู่ ใช้โหลดใหม่หลังตัดยาหมดอายุ
+    let historyMedicineId = null;
+
     // Modal ดูล็อตยาและประวัติการเคลื่อนไหวสต๊อก (Lots + Transactions)
     async function viewHistory(id) {
+      historyMedicineId = id;
       const medicine = allMedicinesCache.find(item => item.id === id);
       document.getElementById('historyMedicineName').textContent = `ยา: ${medicine ? medicine.name : ''}`;
-      document.getElementById('tbLots').innerHTML = '<tr><td colspan="4">กำลังโหลดข้อมูล...</td></tr>';
+      document.getElementById('tbLots').innerHTML = '<tr><td colspan="5">กำลังโหลดข้อมูล...</td></tr>';
       document.getElementById('tbHistory').innerHTML = '<tr><td colspan="6">กำลังโหลดข้อมูล...</td></tr>';
       document.getElementById('historyModal').style.display = 'flex';
 
@@ -425,16 +497,19 @@
         const res = await fetch(`/api/medicines/${id}/lots`, { headers: { 'Authorization': `Bearer ${token}` } });
         const lots = (await res.json()).data || [];
         document.getElementById('tbLots').innerHTML = lots.length === 0
-          ? '<tr><td colspan="4">ไม่มียาคงเหลือ</td></tr>'
+          ? '<tr><td colspan="5">ไม่มียาคงเหลือ</td></tr>'
           : lots.map(l => `
             <tr>
               <td><strong>${l.lot_number}</strong></td>
               <td style="${l.is_expired ? 'color:#ef4444; font-weight:bold;' : ''}">${l.expiry_date ? formatDate(l.expiry_date) : 'ไม่ทราบ'}${l.is_expired ? ' (หมดอายุแล้ว)' : ''}</td>
               <td>${l.quantity_remaining} / ${l.quantity_received}</td>
               <td>${formatDate(l.received_at)}</td>
+              <td>${!l.is_expired ? '-' : isOwner
+                ? `<button class="btn btn-danger btn-sm" onclick="openWriteOff(${l.id}, '${l.lot_number}', ${l.quantity_remaining})">ตัดออก</button>`
+                : '<small style="color:#ef4444;">รอเจ้าของคลินิกตัดออก</small>'}</td>
             </tr>`).join('');
       } catch (err) {
-        document.getElementById('tbLots').innerHTML = '<tr><td colspan="4">ไม่สามารถดึงข้อมูลล็อตได้</td></tr>';
+        document.getElementById('tbLots').innerHTML = '<tr><td colspan="5">ไม่สามารถดึงข้อมูลล็อตได้</td></tr>';
       }
 
       try {
@@ -453,7 +528,7 @@
         tbody.innerHTML = rows.map(r => `
           <tr>
             <td>${new Date(r.created_at).toLocaleString('th-TH')}</td>
-            <td><span style="color: ${r.change_type === 'in' ? '#10b981' : '#ef4444'}; font-weight:bold;">${r.change_type === 'in' ? 'รับเข้า (+)' : 'จ่ายออก (-)'}</span></td>
+            <td><span style="color: ${changeTypes[r.change_type].color}; font-weight:bold;">${changeTypes[r.change_type].label}</span></td>
             <td>${r.lot_number || '-'}</td>
             <td>${r.quantity}</td>
             <td>${r.reason || '-'}</td>

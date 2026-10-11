@@ -32,9 +32,10 @@ router.get('/', authenticate, async (req, res) => {
       FROM medicines m WHERE m.is_active = TRUE AND (m.name LIKE ? OR m.code LIKE ? OR m.generic_name LIKE ?)`;
     const params = [searchTerm, searchTerm, searchTerm];
 
-    // ถ้าติ๊ก "แสดงเฉพาะยาใกล้หมด" จะกรองเฉพาะยาที่คงเหลือไม่เกินจุดสั่งซื้อ
+    // ถ้าติ๊ก "แสดงเฉพาะยาใกล้หมด" จะกรองเฉพาะยาที่คงเหลือ (ไม่นับส่วนที่หมดอายุ) ไม่เกินจุดสั่งซื้อ
+    // ใช้ HAVING เพราะต้องอ้างถึง expired_quantity ที่คำนวณใน SELECT
     if (lowStockOnly === 'true') {
-      query += ' AND m.stock_quantity <= m.reorder_level';
+      query += ' HAVING m.stock_quantity - expired_quantity <= m.reorder_level';
     }
 
     query += ' ORDER BY m.name ASC';
@@ -177,6 +178,56 @@ router.post('/:id/stock-in', authenticate, authorize('admin', 'doctor', 'nurse')
 
     await connection.commit();
     res.json({ message: 'รับยาเข้าสต๊อกสำเร็จ', lotId });
+  } catch (err) {
+    if (connection) await connection.rollback();
+    if (err.status) return res.status(err.status).json({ message: err.message });
+    res.status(500).json({ message: 'เกิดข้อผิดพลาดในระบบ', error: err.message });
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
+// วิธีจัดการยาหมดอายุที่เลือกได้ และข้อความที่บันทึกลงประวัติสต๊อก
+const WRITE_OFF_METHODS = { destroy: 'ทำลาย', return: 'คืนผู้จำหน่าย' };
+
+// POST /api/medicines/lots/:lotId/write-off - ตัดยาหมดอายุออกจากสต๊อก (เฉพาะเจ้าของคลินิก)
+// ตัดได้เฉพาะล็อตที่หมดอายุแล้วและยังมียาเหลือ ตัดทั้งล็อตในครั้งเดียว
+// จำกัดสิทธิ์เพราะเป็นการลดสต๊อกโดยไม่มีใบสั่งยารองรับ ทุกครั้งบันทึกผู้ตัด วิธีจัดการ และหมายเหตุไว้ตรวจสอบย้อนหลัง
+router.post('/lots/:lotId/write-off', authenticate, authorize('admin'), async (req, res) => {
+  const { method } = req.body;
+  const note = typeof req.body.note === 'string' ? req.body.note.trim() : '';
+  if (!WRITE_OFF_METHODS[method]) return res.status(400).json({ message: 'กรุณาเลือกวิธีจัดการยาหมดอายุ' });
+  if (note.length > 150) return res.status(400).json({ message: 'หมายเหตุยาวเกิน 150 ตัวอักษร' });
+
+  let connection;
+  try {
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+
+    // หาว่าล็อตนี้เป็นของยาตัวไหน แล้วล็อกแถวยาก่อนแถวล็อต (ลำดับเดียวกับตอนจ่ายยา กัน deadlock)
+    const [[found]] = await connection.query('SELECT medicine_id FROM medicine_lots WHERE id = ?', [req.params.lotId]);
+    if (!found) throw failure(404, 'ไม่พบล็อตยา');
+    await connection.query('SELECT id FROM medicines WHERE id = ? FOR UPDATE', [found.medicine_id]);
+    const [[lot]] = await connection.query(
+      `SELECT id, medicine_id, lot_number, quantity_remaining, expiry_date < CURDATE() AS is_expired
+       FROM medicine_lots WHERE id = ? FOR UPDATE`,
+      [req.params.lotId]
+    );
+    if (!lot.is_expired) throw failure(409, `ล็อต ${lot.lot_number} ยังไม่หมดอายุ ตัดออกไม่ได้`);
+    if (lot.quantity_remaining <= 0) throw failure(409, `ล็อต ${lot.lot_number} ไม่มียาเหลือแล้ว`);
+
+    // ตัดยาที่เหลือทั้งล็อต ลดสต๊อกรวม และบันทึกประวัติเป็นการปรับยอด (adjustment) จำนวนติดลบ
+    const quantity = lot.quantity_remaining;
+    await connection.query('UPDATE medicine_lots SET quantity_remaining = 0 WHERE id = ?', [lot.id]);
+    await connection.query('UPDATE medicines SET stock_quantity = stock_quantity - ? WHERE id = ?', [quantity, lot.medicine_id]);
+    await connection.query(
+      `INSERT INTO stock_transactions (medicine_id, change_type, quantity, reason, lot_id, created_by)
+       VALUES (?, 'adjustment', ?, ?, ?, ?)`,
+      [lot.medicine_id, -quantity, `ตัดยาหมดอายุ (${WRITE_OFF_METHODS[method]})${note ? ` · ${note}` : ''}`, lot.id, req.user.id]
+    );
+
+    await connection.commit();
+    res.json({ message: `ตัดยาหมดอายุล็อต ${lot.lot_number} จำนวน ${quantity} ออกจากสต๊อกแล้ว`, quantity });
   } catch (err) {
     if (connection) await connection.rollback();
     if (err.status) return res.status(err.status).json({ message: err.message });

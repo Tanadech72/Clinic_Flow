@@ -66,13 +66,30 @@
             <tr>
               <th>รหัส</th>
               <th>ชื่อยา</th>
-              <th>จำนวนคงเหลือ</th>
+              <th>คงเหลือที่ใช้ได้</th>
               <th>จุดสั่งซื้อ</th>
             </tr>
           </thead>
           <tbody id="tbLowStock">
             <tr><td colspan="4">กำลังโหลดข้อมูล...</td></tr>
           </tbody>
+        </table>
+      </div>
+
+      <!-- แสดงเฉพาะเมื่อมีล็อตที่หมดอายุแล้วแต่ยังไม่ได้ตัดออกจากสต๊อก -->
+      <div class="section-block tone-danger" id="expiredBlock" hidden>
+        <h2>ยาหมดอายุแล้ว รอตัดออกจากสต๊อก</h2>
+        <p class="muted">เจ้าของคลินิกตัดออกได้ที่หน้าคลังยา → ปุ่ม "ล็อต/ประวัติ" ของยานั้น ยาเหล่านี้จ่ายให้ผู้ป่วยไม่ได้แล้ว</p>
+        <table>
+          <thead>
+            <tr>
+              <th>รหัส</th>
+              <th>ชื่อยา</th>
+              <th>หมดอายุเมื่อ</th>
+              <th>ค้างในสต๊อก</th>
+            </tr>
+          </thead>
+          <tbody id="tbExpired"></tbody>
         </table>
       </div>
 
@@ -163,6 +180,16 @@
             <td>${m.name}</td>
             <td style="color:#ef4444; font-weight:bold;">${m.stock_quantity}</td>
             <td>${m.reorder_level}</td>
+          </tr>`).join('');
+
+      // ล็อตที่หมดอายุแล้ว รอตัดออก (ซ่อนทั้งกล่องถ้าไม่มี)
+      document.getElementById('expiredBlock').hidden = data.expiredLots.length === 0;
+      document.getElementById('tbExpired').innerHTML = data.expiredLots.map(m => `
+          <tr>
+            <td>${m.code}</td>
+            <td>${m.name}<br><small>ล็อต ${m.lot_number}</small></td>
+            <td style="color:#ef4444; font-weight:bold;">${formatDate(m.expiry_date, false)}</td>
+            <td>${m.stock_quantity}</td>
           </tr>`).join('');
 
       const tbExpiring = document.getElementById('tbExpiring');

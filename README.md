@@ -152,6 +152,7 @@ npm test
 | POST | `/api/medicines` | เพิ่มยาใหม่ | admin, doctor, nurse |
 | PUT | `/api/medicines/:id` | แก้ไขข้อมูลยา รวมถึงรหัสยา (ห้ามซ้ำ) | admin |
 | POST | `/api/medicines/:id/stock-in` | รับยาเข้าสต๊อก ระบุเลขล็อต วันหมดอายุ และจำนวน | admin, doctor, nurse |
+| POST | `/api/medicines/lots/:lotId/write-off` | ตัดยาหมดอายุออกจากสต๊อก (ทำลาย/คืนผู้จำหน่าย) | admin |
 | GET | `/api/medicines/:id/lots` | ล็อตที่ยังมียาเหลือ เรียงตามลำดับที่ตัดจ่าย (FEFO) | ผู้ล็อกอิน |
 | GET | `/api/medicines/:id/transactions` | ประวัติการเคลื่อนไหวสต๊อก | ผู้ล็อกอิน |
 | GET | `/api/dashboard` | สรุปข้อมูลภาพรวมคลินิก | ผู้ล็อกอิน |
@@ -175,7 +176,7 @@ curl http://localhost:3000/api/patients \
 
 | ไฟล์ | ใช้สำหรับ |
 |---|---|
-| [docs/test-cases.md](docs/test-cases.md) | ระบบทำงานได้ครบฟังก์ชัน ≥ 90% (66 กรณีทดสอบ) |
+| [docs/test-cases.md](docs/test-cases.md) | ระบบทำงานได้ครบฟังก์ชัน ≥ 90% (68 กรณีทดสอบ) |
 | [docs/postman/](docs/postman/README.md) | ทดสอบ API อัตโนมัติด้วย Postman (41 request) |
 | [docs/data-accuracy.md](docs/data-accuracy.md) | ความถูกต้องของข้อมูล ≥ 95% |
 | [docs/uat-questionnaire.md](docs/uat-questionnaire.md) | ความพึงพอใจผู้ใช้งาน ≥ 80% |
