@@ -6,18 +6,21 @@ const { authenticate, authorize } = require('../middleware/auth');
 const metrics = require('../public/js/patient-metrics');
 // แปลงข้อมูลผู้ป่วยก่อนส่งกลับ: ตัดน้ำหนัก/ส่วนสูง/BMI เดิมทิ้ง (ย้ายไปเก็บตามการมารักษาแต่ละครั้งแล้ว)
 // และเพิ่มอายุที่คำนวณจากวันเกิด
-const withMetrics = patient => {
-  const { weight_kg, height_cm, bmi, ...data } = patient;
-  return {...data, age: metrics.age(patient.date_of_birth)};
-};
+function withMetrics(patient) {
+  const data = Object.assign({}, patient);
+  delete data.weight_kg;
+  delete data.height_cm;
+  delete data.bmi;
+  data.age = metrics.age(patient.date_of_birth);
+  return data;
+}
+
 // middleware ตรวจวันเกิด: ต้องเป็นวันที่ถูกต้องและไม่อยู่ในอนาคต
 function validateMeasurements(req, res, next) {
-  try {
-    if (req.body.date_of_birth && metrics.age(req.body.date_of_birth) === null) {
-      throw Error('วันเกิดไม่ถูกต้อง หรือตรงกับวันที่ในอนาคต');
-    }
-    next();
-  } catch (err) { res.status(400).json({message: err.message}); }
+  if (req.body.date_of_birth && metrics.age(req.body.date_of_birth) === null) {
+    return res.status(400).json({ message: 'วันเกิดไม่ถูกต้อง หรือตรงกับวันที่ในอนาคต' });
+  }
+  next();
 }
 
 const router = express.Router();
@@ -26,12 +29,24 @@ const router = express.Router();
 // query params: search, page, limit
 router.get('/', authenticate, async (req, res) => {
   try {
-    const { search = '', page = 1, limit = 20 } = req.query;
+    // ค่าที่ไม่ส่งมาใช้ค่าเริ่มต้น: ค้นหาทั้งหมด หน้า 1 หน้าละ 20 รายการ
+    let search = req.query.search;
+    if (search === undefined) {
+      search = '';
+    }
+    let page = req.query.page;
+    if (page === undefined) {
+      page = 1;
+    }
+    let limit = req.query.limit;
+    if (limit === undefined) {
+      limit = 20;
+    }
     // คำนวณตำแหน่งเริ่มของหน้าที่ขอ เช่น หน้า 2 ทีละ 20 รายการ -> ข้าม 20 รายการแรก
     const offset = (page - 1) * limit;
 
     // ค้นหาแบบมีคำนี้อยู่ตรงไหนก็ได้ ในชื่อ นามสกุล HN หรือเลขบัตรประชาชน
-    const searchTerm = `%${search}%`;
+    const searchTerm = '%' + search + '%';
     const [rows] = await pool.query(
       `SELECT id, hn_code, national_id, prefix, first_name, last_name, gender,
               date_of_birth, phone, blood_type, allergies, underlying_conditions,
@@ -45,14 +60,21 @@ router.get('/', authenticate, async (req, res) => {
     );
 
     // นับจำนวนทั้งหมดที่ตรงเงื่อนไข ใช้แสดงจำนวนหน้า
-    const [[{ total }]] = await pool.query(
+    const [countRows] = await pool.query(
       `SELECT COUNT(*) AS total FROM patients
        WHERE is_active = TRUE
          AND (first_name LIKE ? OR last_name LIKE ? OR hn_code LIKE ? OR national_id LIKE ?)`,
       [searchTerm, searchTerm, searchTerm, searchTerm]
     );
+    const total = countRows[0].total;
 
-    res.json({ data: rows.map(withMetrics), total, page: Number(page), limit: Number(limit) });
+    // เพิ่มอายุให้ผู้ป่วยทุกคนก่อนส่งกลับ
+    const patients = [];
+    for (const row of rows) {
+      patients.push(withMetrics(row));
+    }
+
+    res.json({ data: patients, total: total, page: Number(page), limit: Number(limit) });
   } catch (err) {
     res.status(500).json({ message: 'เกิดข้อผิดพลาดในระบบ', error: err.message });
   }
@@ -77,12 +99,9 @@ router.get('/:id', authenticate, async (req, res) => {
 router.post('/', authenticate, authorize('admin', 'doctor', 'nurse'), validateMeasurements, async (req, res) => {
   let connection;
   try {
-    const {
-      national_id, prefix, first_name, last_name, gender,
-      date_of_birth, phone, address, blood_type, allergies, underlying_conditions,
-    } = req.body;
+    const body = req.body;
 
-    if (!first_name || !last_name || !gender) {
+    if (!body.first_name || !body.last_name || !body.gender) {
       return res.status(400).json({ message: 'กรุณากรอกชื่อ นามสกุล และเพศให้ครบถ้วน' });
     }
 
@@ -93,16 +112,27 @@ router.post('/', authenticate, authorize('admin', 'doctor', 'nurse'), validateMe
     // สร้างแถวเก็บลำดับเลข HN ถ้ายังไม่มี (ครั้งแรกของระบบ)
     await connection.query('INSERT IGNORE INTO patient_hn_sequence (id, last_number) VALUES (1, 0)');
     // ล็อกแถวลำดับเลข (FOR UPDATE) คนอื่นที่ลงทะเบียนพร้อมกันต้องรอจนกว่าจะ commit
-    const [[sequence]] = await connection.query('SELECT last_number FROM patient_hn_sequence WHERE id = 1 FOR UPDATE');
+    const [sequenceRows] = await connection.query('SELECT last_number FROM patient_hn_sequence WHERE id = 1 FOR UPDATE');
+    const lastNumber = Number(sequenceRows[0].last_number);
     // หาเลข HN สูงสุดที่มีอยู่จริง กันกรณีมีข้อมูลเก่าที่เลขสูงกว่าลำดับที่เก็บไว้
-    const [[existing]] = await connection.query(`SELECT COALESCE(MAX(CAST(SUBSTRING(hn_code, 3) AS UNSIGNED)), 0) AS highest
+    const [highestRows] = await connection.query(`SELECT COALESCE(MAX(CAST(SUBSTRING(hn_code, 3) AS UNSIGNED)), 0) AS highest
       FROM patients WHERE hn_code REGEXP '^HN[0-9]+$'`);
+    const highestNumber = Number(highestRows[0].highest);
     // เลขถัดไป = ค่าที่มากกว่าระหว่างลำดับที่เก็บไว้กับ HN สูงสุดที่มีจริง แล้วบวก 1
-    const nextNumber = Math.max(Number(sequence.last_number), Number(existing.highest)) + 1;
+    let nextNumber = lastNumber + 1;
+    if (highestNumber > lastNumber) {
+      nextNumber = highestNumber + 1;
+    }
     // กันเลขเกินขอบเขตที่ JavaScript เก็บได้แม่นยำ (ไม่น่าเกิดในการใช้งานจริง)
-    if (!Number.isSafeInteger(nextNumber)) throw new Error('HN sequence exceeds supported range');
-    // จัดรูปแบบเป็น HN0001, HN0002, ...
-    const hn_code = `HN${String(nextNumber).padStart(4, '0')}`;
+    if (!Number.isSafeInteger(nextNumber)) {
+      throw new Error('HN sequence exceeds supported range');
+    }
+    // จัดรูปแบบเป็น HN0001, HN0002, ... (เติม 0 ข้างหน้าให้ครบ 4 หลัก)
+    let digits = String(nextNumber);
+    while (digits.length < 4) {
+      digits = '0' + digits;
+    }
+    const hnCode = 'HN' + digits;
     // บันทึกเลขล่าสุดกลับไป ให้คนถัดไปได้เลขต่อจากนี้
     await connection.query('UPDATE patient_hn_sequence SET last_number = ? WHERE id = 1', [nextNumber]);
 
@@ -112,21 +142,40 @@ router.post('/', authenticate, authorize('admin', 'doctor', 'nurse'), validateMe
         (hn_code, national_id, prefix, first_name, last_name, gender, date_of_birth,
          phone, address, blood_type, allergies, underlying_conditions)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [hn_code, national_id || null, prefix || null, first_name, last_name, gender, date_of_birth || null,
-        phone || null, address || null, blood_type || null, allergies || null, underlying_conditions || null]
+      [
+        hnCode,
+        body.national_id || null,
+        body.prefix || null,
+        body.first_name,
+        body.last_name,
+        body.gender,
+        body.date_of_birth || null,
+        body.phone || null,
+        body.address || null,
+        body.blood_type || null,
+        body.allergies || null,
+        body.underlying_conditions || null,
+      ]
     );
 
     // commit = ยืนยันทั้งเลข HN และข้อมูลผู้ป่วยพร้อมกัน และปลดล็อกให้คนถัดไป
     await connection.commit();
-    res.status(201).json({ message: `เพิ่มข้อมูลผู้ป่วยสำเร็จ · รหัส HN: ${hn_code}`, patientId: result.insertId, hn_code });
+    res.status(201).json({ message: 'เพิ่มข้อมูลผู้ป่วยสำเร็จ · รหัส HN: ' + hnCode, patientId: result.insertId, hn_code: hnCode });
   } catch (err) {
     // เกิดข้อผิดพลาด -> ยกเลิกทุกอย่างใน transaction (เลข HN ไม่ถูกใช้ไป)
-    if (connection) await connection.rollback();
+    if (connection) {
+      await connection.rollback();
+    }
     if (err.code === 'ER_DUP_ENTRY') {
       return res.status(409).json({ message: 'เลขบัตรประชาชนหรือรหัสผู้ป่วยนี้มีอยู่แล้วในระบบ' });
     }
     res.status(500).json({ message: 'เกิดข้อผิดพลาดในระบบ', error: err.message });
-  } finally { if (connection) connection.release(); } // คืนการเชื่อมต่อให้ pool เสมอ ไม่ว่าสำเร็จหรือไม่
+  } finally {
+    // คืนการเชื่อมต่อให้ pool เสมอ ไม่ว่าสำเร็จหรือไม่
+    if (connection) {
+      connection.release();
+    }
+  }
 });
 
 // PUT /api/patients/:id - แก้ไขข้อมูลผู้ป่วย
@@ -176,7 +225,7 @@ router.put(
       const values = [];
 
       // สร้างคำสั่ง UPDATE เฉพาะช่องที่ส่งมาจริง ช่องที่ไม่ส่งมาจะไม่ถูกแตะ
-      fields.forEach((field) => {
+      for (const field of fields) {
         if (req.body[field] !== undefined) {
           let value = req.body[field];
 
@@ -189,10 +238,10 @@ router.put(
             value = null;
           }
 
-          updates.push(`${field} = ?`);
+          updates.push(field + ' = ?');
           values.push(value);
         }
-      });
+      }
 
       if (updates.length === 0) {
         return res.status(400).json({

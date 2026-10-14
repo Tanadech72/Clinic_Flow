@@ -12,7 +12,8 @@ const router = express.Router();
 // POST /api/auth/login - เข้าสู่ระบบ
 router.post('/login', async (req, res) => {
   try {
-    const { username, password } = req.body;
+    const username = req.body.username;
+    const password = req.body.password;
 
     if (!username || !password) {
       return res.status(400).json({ message: 'กรุณากรอก username และ password' });
@@ -64,10 +65,17 @@ const MIN_PASSWORD_LENGTH = 6;
 // บทบาทที่เจ้าของคลินิกสร้างหรือเปลี่ยนให้ได้ (สร้างบัญชี admin เพิ่มจากหน้าเว็บไม่ได้)
 const STAFF_ROLES = ['doctor', 'nurse'];
 // ตรวจว่าเป็นเลข id ที่ถูกต้อง (จำนวนเต็มบวก)
-const validId = value => Number.isSafeInteger(Number(value)) && Number(value) > 0;
+function validId(value) {
+  const number = Number(value);
+  return Number.isSafeInteger(number) && number > 0;
+}
 // คืนข้อความ error ถ้ารหัสผ่านสั้นเกินไป หรือ null ถ้าผ่าน
-const passwordError = password => (typeof password !== 'string' || password.length < MIN_PASSWORD_LENGTH)
-  ? `รหัสผ่านต้องมีอย่างน้อย ${MIN_PASSWORD_LENGTH} ตัวอักษร` : null;
+function passwordError(password) {
+  if (typeof password !== 'string' || password.length < MIN_PASSWORD_LENGTH) {
+    return 'รหัสผ่านต้องมีอย่างน้อย ' + MIN_PASSWORD_LENGTH + ' ตัวอักษร';
+  }
+  return null;
+}
 
 // ดึงข้อมูลบัญชีจาก id (ไม่รวมรหัสผ่าน)
 async function findUser(id) {
@@ -94,7 +102,8 @@ router.post('/users', authenticate, authorize('admin'), async (req, res) => {
   try {
     const username = String(req.body.username || '').trim();
     const full_name = String(req.body.full_name || '').trim();
-    const { password, role } = req.body;
+    const password = req.body.password;
+    const role = req.body.role;
 
     if (!username || !password || !full_name || !role) {
       return res.status(400).json({ message: 'กรุณากรอกข้อมูลให้ครบถ้วน' });
@@ -160,7 +169,11 @@ router.patch('/users/:id/status', authenticate, authorize('admin'), async (req, 
     if (target.role === 'admin') return res.status(400).json({ message: 'ไม่สามารถปิดการใช้งานบัญชีเจ้าของคลินิกได้' });
 
     await pool.query('UPDATE users SET is_active = ? WHERE id = ?', [req.body.is_active, target.id]);
-    res.json({ message: req.body.is_active ? 'เปิดการใช้งานบัญชีแล้ว' : 'ปิดการใช้งานบัญชีแล้ว' });
+    if (req.body.is_active) {
+      res.json({ message: 'เปิดการใช้งานบัญชีแล้ว' });
+    } else {
+      res.json({ message: 'ปิดการใช้งานบัญชีแล้ว' });
+    }
   } catch (err) {
     res.status(500).json({ message: 'เกิดข้อผิดพลาดในระบบ', error: err.message });
   }
@@ -177,7 +190,7 @@ router.post('/users/:id/reset-password', authenticate, authorize('admin'), async
 
     const passwordHash = await bcrypt.hash(req.body.password, 10);
     await pool.query('UPDATE users SET password_hash = ? WHERE id = ?', [passwordHash, target.id]);
-    res.json({ message: `ตั้งรหัสผ่านใหม่ให้ ${target.username} แล้ว` });
+    res.json({ message: 'ตั้งรหัสผ่านใหม่ให้ ' + target.username + ' แล้ว' });
   } catch (err) {
     res.status(500).json({ message: 'เกิดข้อผิดพลาดในระบบ', error: err.message });
   }
@@ -192,7 +205,8 @@ router.get('/me', authenticate, (req, res) => {
 // PUT /api/auth/me/password - ผู้ใช้ทุกคนเปลี่ยนรหัสผ่านของตัวเอง
 router.put('/me/password', authenticate, async (req, res) => {
   try {
-    const { current_password, new_password } = req.body;
+    const current_password = req.body.current_password;
+    const new_password = req.body.new_password;
     if (!current_password) return res.status(400).json({ message: 'กรุณากรอกรหัสผ่านปัจจุบัน' });
     const invalidPassword = passwordError(new_password);
     if (invalidPassword) return res.status(400).json({ message: invalidPassword });

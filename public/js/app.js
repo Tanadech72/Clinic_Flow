@@ -6,7 +6,7 @@ const message = document.getElementById('message');
 const submitButton = loginForm.querySelector('button[type="submit"]');
 
 // เมื่อกดปุ่มเข้าสู่ระบบ
-loginForm.addEventListener('submit', async (event) => {
+loginForm.addEventListener('submit', async function (event) {
   // หยุดไม่ให้ฟอร์มรีโหลดหน้า แล้วส่งข้อมูลด้วย fetch แทน
   event.preventDefault();
 
@@ -48,7 +48,11 @@ loginForm.addEventListener('submit', async (event) => {
     message.className = 'success';
 
     // ไปหน้าทำงานตามบทบาท: พยาบาล -> หน้าคิวพยาบาล, แพทย์และเจ้าของคลินิก -> ห้องตรวจแพทย์
-    window.location.href = data.user?.role === 'nurse' ? '/nurse.html' : '/doctor.html';
+    if (data.user && data.user.role === 'nurse') {
+      window.location.href = '/nurse.html';
+    } else {
+      window.location.href = '/doctor.html';
+    }
   } catch (error) {
     // แสดงข้อความ error สีแดงใต้ฟอร์ม
     message.textContent = error.message;

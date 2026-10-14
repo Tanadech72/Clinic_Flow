@@ -10,12 +10,12 @@ const router = express.Router();
 router.get('/', authenticate, async (req, res) => {
   try {
     // จำนวนผู้ป่วยทั้งหมดที่ยังใช้งานอยู่
-    const [[patientCount]] = await pool.query(
+    const [patientCountRows] = await pool.query(
       'SELECT COUNT(*) AS total FROM patients WHERE is_active = TRUE'
     );
 
     // จำนวนการตรวจรักษาวันนี้ (นับจากประวัติการรักษาที่บันทึกวันนี้)
-    const [[visitsToday]] = await pool.query(
+    const [visitsTodayRows] = await pool.query(
       'SELECT COUNT(*) AS total FROM medical_records WHERE DATE(visit_date) = CURDATE()'
     );
 
@@ -67,8 +67,8 @@ router.get('/', authenticate, async (req, res) => {
 
     res.json({
       summary: {
-        totalActivePatients: patientCount.total,
-        visitsToday: visitsToday.total,
+        totalActivePatients: patientCountRows[0].total,
+        visitsToday: visitsTodayRows[0].total,
         lowStockCount: lowStockMedicines.length,
         expiringSoonCount: expiringSoon.length,
         expiredLotCount: expiredLots.length,
