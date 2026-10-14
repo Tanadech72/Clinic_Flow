@@ -121,6 +121,9 @@ dialog::backdrop { background:#1d343966; }
 
 @media(max-width:760px) {
   body > nav > a::before,.sidebar-menu li a::before { width:17px; height:17px; }
+  /* เมนูบนมือถือเรียงแบบ flex: ช่องว่าง/ขึ้นบรรทัดระหว่างแท็กใน HTML ไม่มีผลกับระยะห่าง ทุกหน้าจึงเว้นระยะเท่ากัน */
+  body > nav { display:flex; flex-direction:row; flex-wrap:wrap; align-items:center; justify-content:flex-start; }
+  body > nav > strong,body > nav > p { flex-basis:100%; }
   .summary-grid .number { font-size:30px; }
 }
 
